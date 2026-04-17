@@ -1,0 +1,9 @@
+<div class="card">
+    <h3>Current Loan Rate Configuration</h3>
+    <form action="/update-rate" method="POST">
+        <label>Rate Percentage (%)</label>
+        <input type="number" step="0.01" name="new_rate" value="{{ current_rate.percentage }}">
+        <button type="submit" class="btn-success">Update Rate</button>
+    </form>
+    <p><small>Note: Changing this only affects NEW loan applications.</small></p>
+</div>
