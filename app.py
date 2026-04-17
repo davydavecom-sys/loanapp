@@ -1,59 +1,62 @@
 import os
-import psycopg2
-from psycopg2 import extras
+from flask import Flask, render_template, request, redirect, session, flash
+from werkzeug.security import check_password_hash
+from database import LoanAppDB
 
-class LoanAppDB:
-    def __init__(self):
-        self.url = os.environ.get('DATABASE_URL')
+# --- CRITICAL FOR RENDER ---
+# This variable must be named 'app' and be at the top level
+app = Flask(__name__)
 
-    def get_connection(self):
-        try:
-            # The .url must be your port 6543 string from Supabase
-            return psycopg2.connect(self.url)
-        except Exception as e:
-            # CHECK RENDER LOGS FOR THIS PRINT
-            print(f"CRITICAL DATABASE ERROR: {e}")
-            return None
+# Ensure you have 'FLASK_SECRET_KEY' set in Render Environment Variables
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'meru_dev_secure_key_2026')
 
-    def get_user_by_username(self, username):
-        """Updated to use password_hash column name"""
-        query = "SELECT id, username, password_hash, role FROM users WHERE username = %s"
-        conn = self.get_connection()
-        if not conn:
-            return None
-        try:
-            with conn:
-                with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                    cur.execute(query, (username,))
-                    return cur.fetchone()
-        except Exception as e:
-            print(f"Query Error (get_user): {e}")
-            return None
-        finally:
-            if conn:
-                conn.close()
+# Initialize the database helper
+db = LoanAppDB()
 
-    def get_dashboard_stats(self):
-        query = """
-            SELECT 
-                (SELECT COUNT(*) FROM customers) as customers,
-                (SELECT COUNT(*) FROM loans WHERE status = 'active') as active,
-                (SELECT COUNT(*) FROM loans WHERE status = 'overdue') as critical,
-                (SELECT COALESCE(SUM(amount), 0) FROM loans) as portfolio
-        """
-        default_stats = {'customers': 0, 'active': 0, 'critical': 0, 'portfolio': 0}
-        conn = self.get_connection()
-        if not conn:
-            return default_stats
-        try:
-            with conn:
-                with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                    cur.execute(query)
-                    res = cur.fetchone()
-                    return res if res else default_stats
-        except Exception as e:
-            print(f"Query Error (stats): {e}")
-            return default_stats
-        finally:
-            if conn:
-                conn.close()
+@app.route('/')
+def index():
+    """Redirects the root URL to the login page."""
+    return redirect('/login')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # Fetch the user record from the 'users' table in Supabase
+        user = db.get_user_by_username(username)
+        
+        # We use 'password_hash' because that is your database column name
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+            
+            # Direct string redirect to avoid URL building errors on Render
+            return redirect('/dashboard')
+            
+        flash("Invalid username or password.", "danger")
+        
+    return render_template('login.html')
+
+@app.route('/dashboard')
+def dashboard():
+    """Main dashboard view. Protected by session check."""
+    if 'user_id' not in session:
+        return redirect('/login')
+    
+    # Fetches counts for customers, loans, etc.
+    stats = db.get_dashboard_stats()
+    return render_template('dashboard.html', stats=stats)
+
+@app.route('/logout')
+def logout():
+    """Clears the session and sends the user back to login."""
+    session.clear()
+    return redirect('/login')
+
+if __name__ == '__main__':
+    # Local development settings
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
