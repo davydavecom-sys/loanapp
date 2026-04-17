@@ -101,12 +101,18 @@ class LoanAppDB:
                 (SELECT COUNT(*) FROM personal_table) as customers,
                 (SELECT COUNT(*) FROM loan_applications WHERE loan_status = 'active') as active,
                 (SELECT COUNT(*) FROM loan_applications WHERE loan_status = 'active' AND expected_return_date < CURRENT_DATE) as critical,
-                (SELECT COALESCE(SUM(total_to_pay), 0) FROM loan_applications WHERE loan_status IN ('active', 'due')) as portfolio
-        """
+            (SELECT COALESCE(SUM(total_to_pay), 0) FROM loan_applications WHERE loan_status IN ('active', 'due')) as portfolio
+    """
+    try:
         with self.get_connection() as conn:
+            # We use RealDictCursor so the stats can be accessed like stats['customers']
             with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
                 cur.execute(query)
                 return cur.fetchone()
+    except Exception as e:
+        print(f"Database Error: {e}")
+        # Return zeros so the page doesn't crash if the DB fails
+        return {'customers': 0, 'active': 0, 'critical': 0, 'portfolio': 0}
 
     # --- PAYMENT RECORDING ---
     def record_payment(self, loan_id, amount, flutterwave_ref):
