@@ -32,6 +32,8 @@ def login():
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['role'] = user['role']
+
+            flash("login success")
             
             # Direct string redirect to avoid URL building errors on Render
             return redirect('/dashboard')
