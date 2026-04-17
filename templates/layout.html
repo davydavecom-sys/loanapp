@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LoanFlow Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>LOANFLOW v2</h2>
+        <nav>
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+            
+            {% if session['user']['role'] in ['admin', 'marketer'] %}
+                <a href="/register-customer" class="nav-link">Register Customer</a>
+                <a href="/apply-loan" class="nav-link">Apply Loan</a>
+            {% endif %}
+
+            {% if session['user']['role'] in ['admin', 'approver'] %}
+                <a href="/verify-loans" class="nav-link">Approve Loans</a>
+            {% endif %}
+
+            <a href="/balances" class="nav-link">Balances & Collections</a>
+            <a href="/loan-history" class="nav-link">Loan History</a>
+            
+            {% if session['user']['role'] == 'admin' %}
+                <hr>
+                <a href="/settings" class="nav-link">Rate Settings</a>
+                <a href="/users" class="nav-link">Manage Staff</a>
+            {% endif %}
+            
+            <a href="/logout" class="nav-link" style="margin-top: auto; color: var(--danger);">Logout</a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>
