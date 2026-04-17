@@ -1,27 +1,35 @@
 {% extends "layout.html" %}
+
 {% block content %}
-<h1>System Summary</h1>
-<p>Welcome back, <strong>{{ session['username'] }}</strong> ({{ session['role']|capitalize }})</p>
-
-<div class="stats-grid">
-    <div class="stat-card">
-        <h3>Total Customers</h3>
-        <div class="stat-number">{{ stats.customers }}</div>
+<div class="card">
+    <div class="card-header bg-primary text-white">
+        <h3>System Overview</h3>
     </div>
-    
-    <div class="stat-card">
-        <h3>Active Loans</h3>
-        <div class="stat-number">{{ stats.active }}</div>
-    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card text-center border-info mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Users</h5>
+                        <p class="display-4">{{ stats.user_count if stats else 0 }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card text-center border-success mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Active Loans</h5>
+                        <p class="display-4">{{ stats.active_loans if stats else 0 }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-    <div class="stat-card critical">
-        <h3>Critical Loans (Overdue)</h3>
-        <div class="stat-number" style="color: var(--danger);">{{ stats.critical }}</div>
-    </div>
-
-    <div class="stat-card">
-        <h3>Total Portfolio</h3>
-        <div class="stat-number">KES {{ "{:,.2f}".format(stats.portfolio) }}</div>
+        <div class="mt-4">
+            <h5>Quick Actions</h5>
+            <hr>
+            <p>Welcome to the Meru Loan Management Dashboard. Use the sidebar to navigate through the system functions.</p>
+        </div>
     </div>
 </div>
 {% endblock %}
