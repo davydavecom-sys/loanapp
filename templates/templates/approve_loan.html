@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+    <h2>Pending Approvals</h2>
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Customer</th><th>Amount</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for l in loans %}
+                <tr>
+                    <td>{{ l.first_name }} {{ l.last_name }}</td>
+                    <td>KES {{ l.loan_amount }}</td>
+                    <td>
+                        <form action="/approve_loan" method="POST" style="display:inline;">
+                            <input type="hidden" name="loan_id" value="{{ l.loan_id }}">
+                            <button name="status" value="active" class="btn-approve">Approve</button>
+                            <button name="status" value="rejected" class="btn-reject">Deny</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}
