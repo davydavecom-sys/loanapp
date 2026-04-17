@@ -147,3 +147,17 @@ class LoanAppDB:
     except Exception as e:
         print(f"Approval Error: {e}")
         return False
+
+
+    def update_loan_rate(self, new_percentage):
+    # We update the 'is_active' status or just overwrite the main rate
+    query = "UPDATE loan_rates SET percentage = %s WHERE id = (SELECT id FROM loan_rates LIMIT 1)"
+    try:
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (new_percentage,))
+                conn.commit()
+        return True
+    except Exception as e:
+        print(f"DB Error: {e}")
+        return False
