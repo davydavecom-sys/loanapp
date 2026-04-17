@@ -116,6 +116,24 @@ def apply_loan():
 
     return render_template('apply_loan.html', customers=customers)
 
+#approve loan
+@app.route('/approve_loan', methods=['GET', 'POST'])
+@login_required
+def approve_loan():
+    if request.method == 'POST':
+        loan_id = request.form.get('loan_id')
+        status = request.form.get('status')
+        db.review_loan(loan_id, status)
+        flash(f"Loan #{loan_id} has been {status}.")
+        return redirect(url_for('approve_loan'))
+    
+    # Fetch only pending loans
+    with db.get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT l.loan_id, c.first_name, c.last_name, l.loan_amount FROM LOAN_APPLICATIONS l JOIN PERSONAL_TABLE c ON l.customer_id = c.id WHERE l.status = 'pending'")
+            pending = cur.fetchall()
+    return render_template('approve_loan.html', loans=pending)
+
 # --- REPORTS ---
 
 @app.route('/reports/unpaid')
