@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoanFlow | {% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="topnav">
+        <div class="nav-container">
+            <a href="/" class="brand">🇰🇪 LoanFlow</a>
+            <nav class="nav-links">
+                <a href="/" class="{{ 'active' if request.endpoint == 'home' }}">Dashboard</a>
+                <a href="/add_customer">Add Customer</a>
+                <a href="/apply_loan">Apply Loan</a>
+                <a href="/approve_loan">Approve</a>
+                <a href="/loan_status">Status</a>
+                <a href="/reports">Reports</a>
+            </nav>
+            <div class="user-actions">
+                <span class="user-role">{{ session.get('role', 'Staff') }}</span>
+                <a href="/logout" class="btn-logout">Logout</a>
+            </div>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="main-content" style="margin-bottom:0; padding-bottom:0;">
+            {% for m in messages %}<div class="alert">{{ m }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
