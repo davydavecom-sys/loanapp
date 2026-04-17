@@ -49,7 +49,7 @@ def login():
             # 3. Optional: Save the user ID for database queries
             session['user_id'] = user['id']
             
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('/dashboard'))
             
         flash("Invalid credentials.")
     return render_template('login.html')
