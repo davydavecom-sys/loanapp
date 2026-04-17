@@ -1,183 +1,63 @@
 import os
 import psycopg2
 from psycopg2 import extras
-from cryptography.fernet import Fernet
-from werkzeug.security import generate_password_hash, check_password_hash
-import random
-import string
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class LoanAppDB:
     def __init__(self):
-        # Load environment variables
+        # This will pull from your Render Environment Variables
         self.url = os.environ.get('DATABASE_URL')
-        raw_key = os.environ.get('ENCRYPTION_KEY')
-        
-        # Guard clause: Ensure the key exists and is in bytes
-        if not raw_key:
-            raise ValueError("ENCRYPTION_KEY is missing from environment variables!")
-        
-        self.key = raw_key.encode()
-        self.cipher = Fernet(self.key)
 
     def get_connection(self):
-        return psycopg2.connect(self.url)
-
-    # --- ENCRYPTION TOOLS ---
-    def encrypt_data(self, text):
-        if not text: return None
-        return self.cipher.encrypt(text.encode()).decode()
-
-    def decrypt_data(self, encrypted_text):
-        if not encrypted_text: return None
-        return self.cipher.decrypt(encrypted_text.encode()).decode()
-
-    # --- CUSTOM ID GENERATORS ---
-    def generate_payment_id(self):
-        chars = string.ascii_uppercase + string.digits
-        return f"P_{''.join(random.choice(chars) for _ in range(10))}"
-
-    # --- AUTHENTICATION & RBAC ---
-    def login_user(self, username, password):
-        query = "SELECT id, username, password_hash, role FROM users WHERE username = %s"
-        with self.get_connection() as conn:
-            with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                cur.execute(query, (username,))
-                user = cur.fetchone()
-                if user and check_password_hash(user['password_hash'], password):
-                    return user
-        return None
-
-    # --- CUSTOMER REGISTRATION ---
-    def register_customer(self, first_name, last_name, id_num, phone, creator_id):
-        enc_id = self.encrypt_data(id_num)
-        enc_phone = self.encrypt_data(phone)
-        
-        query = """
-            INSERT INTO personal_table (first_name, last_name, id_number, phone, created_by)
-            VALUES (%s, %s, %s, %s, %s) RETURNING custom_id
-        """
+        """Establishes connection to Supabase."""
         try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(query, (first_name, last_name, enc_id, enc_phone, creator_id))
-                    custom_id = cur.fetchone()[0]
-                    conn.commit()
-            return custom_id
+            return psycopg2.connect(self.url)
         except Exception as e:
-            print(f"Registration Error: {e}")
+            print(f"CRITICAL: Database connection failed: {e}")
             return None
 
-    # --- LOAN APPLICATION LOGIC ---
-    def apply_for_loan(self, customer_id, amount, return_date, rate_id):
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                # 1. Fetch current rate
-                cur.execute("SELECT percentage FROM loan_rates WHERE id = %s", (rate_id,))
-                rate_row = cur.fetchone()
-                rate = float(rate_row[0]) if rate_row else 0.0
+    def login_user(self, username, password):
+        """Checks credentials and returns user dict."""
+        query = "SELECT id, username, role FROM users WHERE username = %s AND password = %s"
+        conn = self.get_connection()
+        if not conn:
+            return None
+            
+        try:
+            with conn:
+                # RealDictCursor allows you to use user['role'] in app.py
+                with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                    cur.execute(query, (username, password))
+                    return cur.fetchone()
+        except Exception as e:
+            print(f"Login Error: {e}")
+            return None
+        finally:
+            conn.close()
 
-                # 2. Calculate Interest
-                interest_amount = amount * (rate / 100)
-                total_to_pay = amount + interest_amount
-
-                # 3. Insert Application
-                query = """
-                    INSERT INTO loan_applications (
-                        customer_id, amount_requested, interest_rate, 
-                        interest_amount, total_to_pay, expected_return_date, 
-                        application_status
-                    ) VALUES (%s, %s, %s, %s, %s, %s, 'pending')
-                    RETURNING loan_app_id
-                """
-                cur.execute(query, (customer_id, amount, rate, interest_amount, total_to_pay, return_date))
-                app_id = cur.fetchone()[0]
-                conn.commit()
-                return app_id
-
-    # --- DASHBOARD SUMMARY LOGIC ---
     def get_dashboard_stats(self):
+        """Fetches counts for the dashboard cards."""
         query = """
             SELECT 
-                (SELECT COUNT(*) FROM personal_table) as customers,
-                (SELECT COUNT(*) FROM loan_applications WHERE loan_status = 'active') as active,
-                (SELECT COUNT(*) FROM loan_applications WHERE loan_status = 'active' AND expected_return_date < CURRENT_DATE) as critical,
-            (SELECT COALESCE(SUM(total_to_pay), 0) FROM loan_applications WHERE loan_status IN ('active', 'due')) as portfolio
-    """
-    try:
-        with self.get_connection() as conn:
-            # We use RealDictCursor so the stats can be accessed like stats['customers']
-            with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                cur.execute(query)
-                return cur.fetchone()
-    except Exception as e:
-        print(f"Database Error: {e}")
-        # Return zeros so the page doesn't crash if the DB fails
-        return {'customers': 0, 'active': 0, 'critical': 0, 'portfolio': 0}
-
-    # --- PAYMENT RECORDING ---
-    def record_payment(self, loan_id, amount, flutterwave_ref):
-        payment_id = self.generate_payment_id() 
-        query = """
-            INSERT INTO payments (payment_id, loan_id, amount_paid, flutterwave_ref)
-            VALUES (%s, %s, %s, %s);
+                (SELECT COUNT(*) FROM customers) as customers,
+                (SELECT COUNT(*) FROM loans WHERE status = 'active') as active,
+                (SELECT COUNT(*) FROM loans WHERE status = 'overdue') as critical,
+                (SELECT COALESCE(SUM(amount), 0) FROM loans) as portfolio
         """
-        try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(query, (payment_id, loan_id, amount, flutterwave_ref))
-                
-                    # Check if loan is now fully cleared
-                    cur.execute("""
-                        SELECT total_to_pay, (SELECT SUM(amount_paid) FROM payments WHERE loan_id = %s)
-                        FROM loan_applications WHERE id = %s
-                    """, (loan_id, loan_id))
-                    res = cur.fetchone()
-                    if res and res[1] >= res[0]:
-                        cur.execute("UPDATE loan_applications SET loan_status = 'cleared' WHERE id = %s", (loan_id,))
-                
-                    conn.commit()
-            return payment_id
-        except Exception as e:
-            print(f"Payment Error: {e}")
-            return None
+        conn = self.get_connection()
+        if not conn:
+            return {'customers': 0, 'active': 0, 'critical': 0, 'portfolio': 0}
 
-    # --- APPROVAL LOGIC ---
-    def approve_loan(self, app_internal_id, approver_id):
-        query = """
-            UPDATE loan_applications 
-            SET application_status = 'accepted', 
-                loan_status = 'active',
-                approved_by = %s,
-                approved_at = CURRENT_TIMESTAMP
-            WHERE id = %s
-        """
         try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(query, (approver_id, app_internal_id))
-                    conn.commit()
-            return True
+            with conn:
+                with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                    cur.execute(query)
+                    result = cur.fetchone()
+                    return result if result else {'customers': 0, 'active': 0, 'critical': 0, 'portfolio': 0}
         except Exception as e:
-            print(f"Approval Error: {e}")
-            return False
-
-    # --- CONTROL PANEL LOGIC ---
-    def update_loan_rate(self, new_percentage):
-        query = "UPDATE loan_rates SET percentage = %s WHERE id = (SELECT id FROM loan_rates LIMIT 1)"
-        try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(query, (new_percentage,))
-                    conn.commit()
-            return True
-        except Exception as e:
-            print(f"DB Error: {e}")
-            return False
-
-    # --- HELPER: GET RATE ---
-    def get_active_rate(self):
-        query = "SELECT id, percentage FROM loan_rates LIMIT 1"
-        with self.get_connection() as conn:
-            with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                cur.execute(query)
-                return cur.fetchone()
+            print(f"Stats Error: {e}")
+            return {'customers': 0, 'active': 0, 'critical': 0, 'portfolio': 0}
+        finally:
+            conn.close()
