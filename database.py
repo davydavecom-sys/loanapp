@@ -4,19 +4,19 @@ from psycopg2 import extras
 
 class LoanAppDB:
     def __init__(self):
-        # This pulls the DATABASE_URL from your Render Environment Variables
         self.url = os.environ.get('DATABASE_URL')
 
     def get_connection(self):
-        """Establishes connection to Supabase using the Transaction Pooler."""
         try:
+            # The .url must be your port 6543 string from Supabase
             return psycopg2.connect(self.url)
         except Exception as e:
-            print(f"Database Connection Error: {e}")
+            # CHECK RENDER LOGS FOR THIS PRINT
+            print(f"CRITICAL DATABASE ERROR: {e}")
             return None
 
     def get_user_by_username(self, username):
-        # Changed 'password' to 'password_hash'
+        """Updated to use password_hash column name"""
         query = "SELECT id, username, password_hash, role FROM users WHERE username = %s"
         conn = self.get_connection()
         if not conn:
@@ -30,10 +30,10 @@ class LoanAppDB:
             print(f"Query Error (get_user): {e}")
             return None
         finally:
-            conn.close()
+            if conn:
+                conn.close()
 
     def get_dashboard_stats(self):
-        """Fetches counts for dashboard. Returns zeros on error to prevent 500 crash."""
         query = """
             SELECT 
                 (SELECT COUNT(*) FROM customers) as customers,
@@ -55,4 +55,5 @@ class LoanAppDB:
             print(f"Query Error (stats): {e}")
             return default_stats
         finally:
-            conn.close()
+            if conn:
+                conn.close()
