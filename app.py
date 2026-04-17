@@ -1,17 +1,17 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, session, flash
-from database import LoanAppDB
 from werkzeug.security import check_password_hash
+from database import LoanAppDB
 
 app = Flask(__name__)
-# Ensure this key is set in your Render Environment Variables
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev_key_meru_2026')
+# Ensure FLASK_SECRET_KEY is set in Render Environment
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'default_secret_key_meru')
 
 db = LoanAppDB()
 
 @app.route('/')
 def index():
-    """Directs users to login page immediately."""
+    """Redirects visitors to the login page."""
     return redirect('/login')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -20,21 +20,24 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        # 1. Fetch the user by username only
         user = db.get_user_by_username(username)
         
-        # 2. Check if user exists AND if the password hash matches
+        # Verify the password against the hash stored in Supabase
         if user and check_password_hash(user['password'], password):
             session['user_id'] = user['id']
+            session['username'] = user['username']
             session['role'] = user['role']
+            
+            # Using direct string redirect to bypass BuildErrors
             return redirect('/dashboard')
             
-        flash("Invalid credentials", "danger")
+        flash("Invalid username or password.", "danger")
+        
     return render_template('login.html')
 
 @app.route('/dashboard')
 def dashboard():
-    # Simple login check
+    """Main dashboard view, protected by login check."""
     if 'user_id' not in session:
         return redirect('/login')
     
@@ -43,10 +46,11 @@ def dashboard():
 
 @app.route('/logout')
 def logout():
+    """Clears session and logs user out."""
     session.clear()
     return redirect('/login')
 
 if __name__ == '__main__':
-    # Render sets the PORT automatically
+    # Render provides the PORT dynamically
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
