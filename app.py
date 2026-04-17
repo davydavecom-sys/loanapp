@@ -20,27 +20,26 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        # Fetch the user record from the 'users' table in Supabase
-        user = db.get_user_by_username(username)
-        
-        # We use 'password_hash' because that is your database column name
-        if user and check_password_hash(user['password_hash'], password):
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['role'] = user['role']
+    # Inside your login route:
+    user = db.get_user_by_username(username)
 
-            flash("login success")
-            
-            # Direct string redirect to avoid URL building errors on Render
+    if user:
+        stored_hash = user['password_hash']
+        # Check if the hash is in the old scrypt format and skip it to avoid the crash
+        if "32768" in stored_hash and "scrypt" in stored_hash:
+            flash("System update required for this account. Please contact admin.", "danger")
+        elif security.check_password_hash(stored_hash, password):
+            session['user_id'] = user['id']
             return redirect('/dashboard')
+
+    if __name__ == '__main__':
+    # Local development settings
+        port = int(os.environ.get('PORT', 5000))
+        app.run(host='0.0.0.0', port=port)
             
-        flash("Invalid username or password.", "danger")
+            flash("Invalid username or password.", "danger")
         
-    return render_template('login.html')
+        return render_template('login.html')
 
 @app.route('/dashboard')
 def dashboard():
@@ -63,7 +62,5 @@ def logout():
     session.clear()
     return redirect('/login')
 
-if __name__ == '__main__':
-    # Local development settings
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+
+
