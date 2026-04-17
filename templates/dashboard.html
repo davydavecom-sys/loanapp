@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 <h1>System Summary</h1>
-<p>Welcome back, <strong>{{ session['user']['username'] }}</strong> ({{ session['user']['role']|capitalize }})</p>
+<p>Welcome back, <strong>{{ session['username'] }}</strong> ({{ session['role']|capitalize }})</p>
 
 <div class="stats-grid">
     <div class="stat-card">
