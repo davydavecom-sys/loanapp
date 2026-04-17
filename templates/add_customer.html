@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add New Customer | LoanFlow</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <header class="topnav">
+        <div class="nav-container">
+            <a href="/" class="brand">🇰🇪 LoanFlow</a>
+            <nav class="nav-links">
+                <a href="/">Dashboard</a>
+                <a href="/add_customer" class="active">Add Customer</a>
+                <a href="/logout" class="btn-logout">Logout</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="form-container" style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h2>Register New Customer</h2>
+            <hr style="margin-bottom: 20px; border: 0; border-top: 1px solid #eee;">
+            
+            <form method="POST">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group">
+                        <label>First Name</label>
+                        <input type="text" name="first_name" required style="width:100%; padding:10px; margin-top:5px; border:1px solid #ddd; border-radius:4px;">
+                    </div>
+                    <div class="form-group">
+                        <label>Last Name</label>
+                        <input type="text" name="last_name" required style="width:100%; padding:10px; margin-top:5px; border:1px solid #ddd; border-radius:4px;">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top:15px;">
+                    <label>National ID Number</label>
+                    <input type="text" name="id_number" required style="width:100%; padding:10px; margin-top:5px; border:1px solid #ddd; border-radius:4px;">
+                </div>
+
+                <div class="form-group" style="margin-top:15px;">
+                    <label>Phone Number (M-Pesa)</label>
+                    <input type="text" name="phone" placeholder="07XXXXXXXX" required style="width:100%; padding:10px; margin-top:5px; border:1px solid #ddd; border-radius:4px;">
+                </div>
+
+                <div class="form-group" style="margin-top:15px;">
+                    <label>Residential Location</label>
+                    <input type="text" name="location" placeholder="e.g. Nairobi West" required style="width:100%; padding:10px; margin-top:5px; border:1px solid #ddd; border-radius:4px;">
+                </div>
+
+                <button type="submit" class="btn-primary" style="width:100%; margin-top:25px; cursor:pointer;">Save Customer</button>
+            </form>
+        </div>
+    </main>
+
+</body>
+</html>

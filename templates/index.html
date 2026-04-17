@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard | LoanFlow Kenya</title>
+    <link rel="stylesheet" href="static/style.css">
+ </head>
+<body>
+
+    <header class="topnav">
+        <div class="nav-container">
+            <a href="/" class="brand">🇰🇪 LoanFlow <span class="portal-tag">Staff Portal</span></a>
+            
+            <nav class="nav-links">
+                <a href="/" class="active">Dashboard</a>
+                <a href="/add_customer">Add Customer</a>
+                <a href="/apply_loan">Apply Loan</a>
+                <a href="/verify">Verify</a>
+                <a href="/reports">Reports</a>
+            </nav>
+
+            <div class="user-actions">
+                <span class="user-role">{{ session['role'] }}</span>
+                <span class="user-name">{{ session['username'] }}</span>
+                <a href="/logout" class="btn-logout">Logout</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="content-header">
+            <h1>Business Overview</h1>
+            <p>Real-time statistics for loan applications and customer registration.</p>
+        </div>
+
+        <section class="stats-grid">
+            <div class="card">
+                <h3>Total Customers</h3>
+                <p class="stat-number">{{ stats.total_customers if stats else '0' }}</p>
+                <span class="stat-label">Registered Members</span>
+            </div>
+            <div class="card">
+                <h3>Active Loans</h3>
+                <p class="stat-number">{{ stats.active_loans if stats else '0' }}</p>
+                <span class="stat-label">Currently Disbursed</span>
+            </div>
+            <div class="card">
+                <h3>Pending Verifications</h3>
+                <p class="stat-number">{{ stats.pending if stats else '0' }}</p>
+                <span class="stat-label">Requires Attention</span>
+            </div>
+        </section>
+
+        <section class="table-container">
+            <div class="table-header">
+                <h2>Recent Customers</h2>
+                <a href="/add_customer" class="btn-primary">+ New Customer</a>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID Number</th>
+                        <th>Full Name</th>
+                        <th>Phone Number</th>
+                        <th>Location</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for customer in customers %}
+                    <tr>
+                        <td>{{ customer.id_number }}</td>
+                        <td>{{ customer.first_name }} {{ customer.last_name }}</td>
+                        <td>{{ customer.phone }}</td>
+                        <td>{{ customer.location }}</td>
+                        <td><a href="/view/{{ customer.id }}" class="btn-view">View</a></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" style="text-align:center;">No customers found in the system.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+</body>
+</html>
