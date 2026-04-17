@@ -1,66 +1,39 @@
-import os
 from flask import Flask, render_template, request, redirect, session, flash
-from werkzeug.security import check_password_hash
-from database import LoanAppDB
+from database import Database
+import os
 
-# --- CRITICAL FOR RENDER ---
-# This variable must be named 'app' and be at the top level
 app = Flask(__name__)
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'meru_dev_2026')
 
-# Ensure you have 'FLASK_SECRET_KEY' set in Render Environment Variables
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'meru_dev_secure_key_2026')
-
-# Initialize the database helper
-db = LoanAppDB()
-
-@app.route('/')
-def index():
-    """Redirects the root URL to the login page."""
-    return redirect('/login')
+# Initialize Database
+db = Database(os.environ.get('DATABASE_URL'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # Inside your login route:
-    user = db.get_user_by_username(username)
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password_attempt = request.form.get('password')
 
-    if user:
-        stored_hash = user['password_hash']
-        # Check if the hash is in the old scrypt format and skip it to avoid the crash
-        if "32768" in stored_hash and "scrypt" in stored_hash:
-            flash("System update required for this account. Please contact admin.", "danger")
-        elif security.check_password_hash(stored_hash, password):
+        user = db.get_user_by_username(username)
+
+        # PLAIN TEXT CHECK:
+        # We check if the user exists and if the stored 'password_hash' 
+        # matches the typed password exactly.
+        if user and user['password_hash'] == password_attempt:
             session['user_id'] = user['id']
+            session['username'] = user['username']
             return redirect('/dashboard')
-
-    if __name__ == '__main__':
-    # Local development settings
-        port = int(os.environ.get('PORT', 5000))
-        app.run(host='0.0.0.0', port=port)
+        else:
+            flash("Invalid username or password", "danger")
             
-            flash("Invalid username or password.", "danger")
-        
-        return render_template('login.html')
+    return render_template('login.html')
 
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' not in session:
         return redirect('/login')
-    
-    try:
-        stats = db.get_dashboard_stats()
-        # If stats is None, provide empty data so the HTML doesn't crash
-        if not stats:
-            stats = {'customers': 0, 'active': 0, 'critical': 0, 'portfolio': 0}
-        return render_template('dashboard.html', stats=stats)
-    except Exception as e:
-        print(f"Dashboard Error: {e}")
-        return "Dashboard failed to load. Check if your tables exist in Supabase."
+    stats = db.get_dashboard_stats()
+    return render_template('dashboard.html', stats=stats)
 
-@app.route('/logout')
-def logout():
-    """Clears the session and sends the user back to login."""
-    session.clear()
-    return redirect('/login')
-
-
-
+if __name__ == '__main__':
+    app.run(debug=True)
