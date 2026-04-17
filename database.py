@@ -8,8 +8,15 @@ import string
 
 class LoanAppDB:
     def __init__(self):
+        # Load environment variables
         self.url = os.environ.get('DATABASE_URL')
-        self.key = os.environ.get('ENCRYPTION_KEY').encode()
+        raw_key = os.environ.get('ENCRYPTION_KEY')
+        
+        # Guard clause: Ensure the key exists and is in bytes
+        if not raw_key:
+            raise ValueError("ENCRYPTION_KEY is missing from environment variables!")
+        
+        self.key = raw_key.encode()
         self.cipher = Fernet(self.key)
 
     def get_connection(self):
@@ -17,9 +24,11 @@ class LoanAppDB:
 
     # --- ENCRYPTION TOOLS ---
     def encrypt_data(self, text):
+        if not text: return None
         return self.cipher.encrypt(text.encode()).decode()
 
     def decrypt_data(self, encrypted_text):
+        if not encrypted_text: return None
         return self.cipher.decrypt(encrypted_text.encode()).decode()
 
     # --- CUSTOM ID GENERATORS ---
@@ -38,9 +47,8 @@ class LoanAppDB:
                     return user
         return None
 
-    # --- CUSTOMER REGISTRATION (Logic: C_0000001) ---
+    # --- CUSTOMER REGISTRATION ---
     def register_customer(self, first_name, last_name, id_num, phone, creator_id):
-        # Secure the sensitive data
         enc_id = self.encrypt_data(id_num)
         enc_phone = self.encrypt_data(phone)
         
@@ -59,7 +67,7 @@ class LoanAppDB:
             print(f"Registration Error: {e}")
             return None
 
-    # --- LOAN APPLICATION LOGIC (Logic: L_0000001 + Calculations) ---
+    # --- LOAN APPLICATION LOGIC ---
     def apply_for_loan(self, customer_id, amount, return_date, rate_id):
         with self.get_connection() as conn:
             with conn.cursor() as cur:
@@ -100,10 +108,9 @@ class LoanAppDB:
                 cur.execute(query)
                 return cur.fetchone()
 
+    # --- PAYMENT RECORDING ---
     def record_payment(self, loan_id, amount, flutterwave_ref):
-    # Requirement: Generate P_ + 10 character string
         payment_id = self.generate_payment_id() 
-    
         query = """
             INSERT INTO payments (payment_id, loan_id, amount_paid, flutterwave_ref)
             VALUES (%s, %s, %s, %s);
@@ -113,13 +120,13 @@ class LoanAppDB:
                 with conn.cursor() as cur:
                     cur.execute(query, (payment_id, loan_id, amount, flutterwave_ref))
                 
-                # Check if loan is now fully cleared
+                    # Check if loan is now fully cleared
                     cur.execute("""
                         SELECT total_to_pay, (SELECT SUM(amount_paid) FROM payments WHERE loan_id = %s)
                         FROM loan_applications WHERE id = %s
                     """, (loan_id, loan_id))
                     res = cur.fetchone()
-                    if res[1] >= res[0]:
+                    if res and res[1] >= res[0]:
                         cur.execute("UPDATE loan_applications SET loan_status = 'cleared' WHERE id = %s", (loan_id,))
                 
                     conn.commit()
@@ -128,36 +135,43 @@ class LoanAppDB:
             print(f"Payment Error: {e}")
             return None
 
-
+    # --- APPROVAL LOGIC ---
     def approve_loan(self, app_internal_id, approver_id):
-    query = """
-        UPDATE loan_applications 
-        SET application_status = 'accepted', 
-            loan_status = 'active',
-            approved_by = %s,
-            approved_at = CURRENT_TIMESTAMP
-        WHERE id = %s
-    """
-    try:
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, (approver_id, app_internal_id))
-                conn.commit()
-        return True
-    except Exception as e:
-        print(f"Approval Error: {e}")
-        return False
+        query = """
+            UPDATE loan_applications 
+            SET application_status = 'accepted', 
+                loan_status = 'active',
+                approved_by = %s,
+                approved_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (approver_id, app_internal_id))
+                    conn.commit()
+            return True
+        except Exception as e:
+            print(f"Approval Error: {e}")
+            return False
 
-
+    # --- CONTROL PANEL LOGIC ---
     def update_loan_rate(self, new_percentage):
-    # We update the 'is_active' status or just overwrite the main rate
-    query = "UPDATE loan_rates SET percentage = %s WHERE id = (SELECT id FROM loan_rates LIMIT 1)"
-    try:
+        query = "UPDATE loan_rates SET percentage = %s WHERE id = (SELECT id FROM loan_rates LIMIT 1)"
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (new_percentage,))
+                    conn.commit()
+            return True
+        except Exception as e:
+            print(f"DB Error: {e}")
+            return False
+
+    # --- HELPER: GET RATE ---
+    def get_active_rate(self):
+        query = "SELECT id, percentage FROM loan_rates LIMIT 1"
         with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, (new_percentage,))
-                conn.commit()
-        return True
-    except Exception as e:
-        print(f"DB Error: {e}")
-        return False
+            with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                cur.execute(query)
+                return cur.fetchone()
