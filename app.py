@@ -14,6 +14,7 @@ def index():
     """Redirects visitors to the login page."""
     return redirect('/login')
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -22,13 +23,11 @@ def login():
         
         user = db.get_user_by_username(username)
         
-        # Verify the password against the hash stored in Supabase
-        if user and check_password_hash(user['password'], password):
+        # We now access ['password_hash'] instead of ['password']
+        if user and check_password_hash(user['password_hash'], password):
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['role'] = user['role']
-            
-            # Using direct string redirect to bypass BuildErrors
             return redirect('/dashboard')
             
         flash("Invalid username or password.", "danger")
