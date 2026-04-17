@@ -42,13 +42,18 @@ def login():
 
 @app.route('/dashboard')
 def dashboard():
-    """Main dashboard view. Protected by session check."""
     if 'user_id' not in session:
         return redirect('/login')
     
-    # Fetches counts for customers, loans, etc.
-    stats = db.get_dashboard_stats()
-    return render_template('dashboard.html', stats=stats)
+    try:
+        stats = db.get_dashboard_stats()
+        # If stats is None, provide empty data so the HTML doesn't crash
+        if not stats:
+            stats = {'customers': 0, 'active': 0, 'critical': 0, 'portfolio': 0}
+        return render_template('dashboard.html', stats=stats)
+    except Exception as e:
+        print(f"Dashboard Error: {e}")
+        return "Dashboard failed to load. Check if your tables exist in Supabase."
 
 @app.route('/logout')
 def logout():
