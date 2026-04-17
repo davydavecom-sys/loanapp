@@ -1,6 +1,7 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from database import LoanAppDB
+from werkzeug.security import check_password_hash
 
 app = Flask(__name__)
 # Ensure this key is set in your Render Environment Variables
@@ -19,19 +20,16 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        user = db.login_user(username, password)
+        # 1. Fetch the user by username only
+        user = db.get_user_by_username(username)
         
-        if user:
-            # Saving user info to session
+        # 2. Check if user exists AND if the password hash matches
+        if user and check_password_hash(user['password'], password):
             session['user_id'] = user['id']
-            session['username'] = user['username']
             session['role'] = user['role']
-            
-            # Direct string redirect to prevent BuildErrors
             return redirect('/dashboard')
             
-        flash("Invalid credentials. Please try again.", "danger")
-        
+        flash("Invalid credentials", "danger")
     return render_template('login.html')
 
 @app.route('/dashboard')
