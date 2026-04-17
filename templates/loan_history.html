@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 style="color: var(--primary);">Loan History & Reports</h2>
+
+<div style="margin-bottom: 20px; background: #ebf2f7; padding: 15px; border-radius: 8px;">
+    <strong>Filter by Status:</strong>
+    <a href="/loan-history" class="btn-small">All</a> |
+    <a href="/loan-history?app_status=pending" class="btn-small">Pending</a> |
+    <a href="/loan-history?app_status=accepted" class="btn-small">Accepted</a> |
+    <a href="/loan-history?app_status=denied" class="btn-small">Denied</a> |
+    <a href="/loan-history?loan_status=cleared" class="btn-small">Cleared</a>
+</div>
+
+<div class="table-container" style="background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead style="background: var(--primary); color: white;">
+            <tr>
+                <th style="padding: 12px;">App ID</th>
+                <th style="padding: 12px;">Customer</th>
+                <th style="padding: 12px;">Principal</th>
+                <th style="padding: 12px;">Total Owed</th>
+                <th style="padding: 12px;">App Status</th>
+                <th style="padding: 12px;">Loan Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for loan in loans %}
+            <tr style="border-bottom: 1px solid #eee;">
+                <td>{{ loan.loan_app_id }}</td>
+                <td>{{ loan.first_name }} {{ loan.last_name }}</td>
+                <td>{{ "{:,.2f}".format(loan.amount_requested) }}</td>
+                <td>{{ "{:,.2f}".format(loan.total_to_pay) }}</td>
+                <td>
+                    <span class="badge {{ loan.application_status }}">{{ loan.application_status|capitalize }}</span>
+                </td>
+                <td>
+                    {% if loan.loan_status %}
+                        <span class="badge {{ loan.loan_status }}">{{ loan.loan_status|capitalize }}</span>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
