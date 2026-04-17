@@ -99,3 +99,25 @@ class LoanAppDB:
             with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
                 cur.execute(query)
                 return cur.fetchone()
+
+
+
+
+    def approve_loan(self, app_internal_id, approver_id):
+    query = """
+        UPDATE loan_applications 
+        SET application_status = 'accepted', 
+            loan_status = 'active',
+            approved_by = %s,
+            approved_at = CURRENT_TIMESTAMP
+        WHERE id = %s
+    """
+    try:
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (approver_id, app_internal_id))
+                conn.commit()
+        return True
+    except Exception as e:
+        print(f"Approval Error: {e}")
+        return False
