@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>System Summary</h1>
+<p>Welcome back, <strong>{{ session['user']['username'] }}</strong> ({{ session['user']['role']|capitalize }})</p>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>Total Customers</h3>
+        <div class="stat-number">{{ stats.customers }}</div>
+    </div>
+    
+    <div class="stat-card">
+        <h3>Active Loans</h3>
+        <div class="stat-number">{{ stats.active }}</div>
+    </div>
+
+    <div class="stat-card critical">
+        <h3>Critical Loans (Overdue)</h3>
+        <div class="stat-number" style="color: var(--danger);">{{ stats.critical }}</div>
+    </div>
+
+    <div class="stat-card">
+        <h3>Total Portfolio</h3>
+        <div class="stat-number">KES {{ "{:,.2f}".format(stats.portfolio) }}</div>
+    </div>
+</div>
+{% endblock %}
