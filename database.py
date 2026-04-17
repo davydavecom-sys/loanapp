@@ -17,6 +17,18 @@ class LoanAppDB:
             print(f"Database Connection Failed: {e}")
             return None
 
+    def get_user_by_username(self, username):
+    query = "SELECT id, username, password, role FROM users WHERE username = %s"
+    conn = self.get_connection()
+    if not conn: return None
+    try:
+        with conn:
+            with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                cur.execute(query, (username,))
+                return cur.fetchone()
+    finally:
+        conn.close()
+
     def login_user(self, username, password):
         """Checks credentials. Uses %s for PostgreSQL."""
         query = "SELECT id, username, role FROM users WHERE username = %s AND password = %s"
