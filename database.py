@@ -1,108 +1,101 @@
+import os
 import psycopg2
 from psycopg2 import extras
-from psycopg2.extras import RealDictCursor
+from cryptography.fernet import Fernet
+from werkzeug.security import generate_password_hash, check_password_hash
+import random
+import string
 
 class LoanAppDB:
     def __init__(self):
-        self.conn_params = {
-            "dbname": "loanapp", 
-            "user": "postgres",
-            "password": "kuku",
-            "host": "localhost",
-            "port": "5432"
-        }
-        try:
-            # We keep one persistent connection for simple counts
-            self.conn = psycopg2.connect(**self.conn_params)
-            print("Database connection successful!")
-        except Exception as e:
-            print(f"Error connecting to database: {e}")
-            self.conn = None
+        self.url = os.environ.get('DATABASE_URL')
+        self.key = os.environ.get('ENCRYPTION_KEY').encode()
+        self.cipher = Fernet(self.key)
 
     def get_connection(self):
-        """Returns a new connection for with-block usage (auto-closes)"""
-        return psycopg2.connect(**self.conn_params)
+        return psycopg2.connect(self.url)
 
-    # --- USER AUTHENTICATION ---
-    def get_user_by_username(self, username):
+    # --- ENCRYPTION TOOLS ---
+    def encrypt_data(self, text):
+        return self.cipher.encrypt(text.encode()).decode()
+
+    def decrypt_data(self, encrypted_text):
+        return self.cipher.decrypt(encrypted_text.encode()).decode()
+
+    # --- CUSTOM ID GENERATORS ---
+    def generate_payment_id(self):
+        chars = string.ascii_uppercase + string.digits
+        return f"P_{''.join(random.choice(chars) for _ in range(10))}"
+
+    # --- AUTHENTICATION & RBAC ---
+    def login_user(self, username, password):
+        query = "SELECT id, username, password_hash, role FROM users WHERE username = %s"
+        with self.get_connection() as conn:
+            with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                cur.execute(query, (username,))
+                user = cur.fetchone()
+                if user and check_password_hash(user['password_hash'], password):
+                    return user
+        return None
+
+    # --- CUSTOMER REGISTRATION (Logic: C_0000001) ---
+    def register_customer(self, first_name, last_name, id_num, phone, creator_id):
+        # Secure the sensitive data
+        enc_id = self.encrypt_data(id_num)
+        enc_phone = self.encrypt_data(phone)
+        
+        query = """
+            INSERT INTO personal_table (first_name, last_name, id_number, phone, created_by)
+            VALUES (%s, %s, %s, %s, %s) RETURNING custom_id
+        """
         try:
-            # Use the persistent connection for quick lookups
-            with self.conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-                return cursor.fetchone()
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (first_name, last_name, enc_id, enc_phone, creator_id))
+                    custom_id = cur.fetchone()[0]
+                    conn.commit()
+            return custom_id
         except Exception as e:
-            if self.conn:
-                self.conn.rollback()
-            print(f"Error fetching user: {e}")
+            print(f"Registration Error: {e}")
             return None
 
-    # --- CUSTOMER MANAGEMENT ---
-    def add_customer(self, first, last, nat_id, phone, location):
-        # I updated the query to match the 'location' field we added to your form
+    # --- LOAN APPLICATION LOGIC (Logic: L_0000001 + Calculations) ---
+    def apply_for_loan(self, customer_id, amount, return_date, rate_id):
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                # 1. Fetch current rate
+                cur.execute("SELECT percentage FROM loan_rates WHERE id = %s", (rate_id,))
+                rate_row = cur.fetchone()
+                rate = float(rate_row[0]) if rate_row else 0.0
+
+                # 2. Calculate Interest
+                interest_amount = amount * (rate / 100)
+                total_to_pay = amount + interest_amount
+
+                # 3. Insert Application
+                query = """
+                    INSERT INTO loan_applications (
+                        customer_id, amount_requested, interest_rate, 
+                        interest_amount, total_to_pay, expected_return_date, 
+                        application_status
+                    ) VALUES (%s, %s, %s, %s, %s, %s, 'pending')
+                    RETURNING loan_app_id
+                """
+                cur.execute(query, (customer_id, amount, rate, interest_amount, total_to_pay, return_date))
+                app_id = cur.fetchone()[0]
+                conn.commit()
+                return app_id
+
+    # --- DASHBOARD SUMMARY LOGIC ---
+    def get_dashboard_stats(self):
         query = """
-            INSERT INTO PERSONAL_TABLE (first_name, last_name, id_number, phone, location)
-            VALUES (%s, %s, %s, %s, %s) RETURNING id;
+            SELECT 
+                (SELECT COUNT(*) FROM personal_table) as customers,
+                (SELECT COUNT(*) FROM loan_applications WHERE loan_status = 'active') as active,
+                (SELECT COUNT(*) FROM loan_applications WHERE loan_status = 'active' AND expected_return_date < CURRENT_DATE) as critical,
+                (SELECT COALESCE(SUM(total_to_pay), 0) FROM loan_applications WHERE loan_status IN ('active', 'due')) as portfolio
         """
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, (first, last, nat_id, phone, location))
-                new_id = cur.fetchone()[0]
-                conn.commit()
-                return new_id
-
-    # --- LOAN MANAGEMENT ---
-    def apply_loan(self, customer_id, amount, period, interest):
-        query = """
-            INSERT INTO LOAN_APPLICATIONS (customer_id, loan_amount, period, interest_rate)
-            VALUES (%s, %s, %s, %s) RETURNING loan_id;
-        """
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, (customer_id, amount, period, interest))
-                loan_id = cur.fetchone()[0]
-                conn.commit()
-                return loan_id
-
-    def review_loan(self, loan_id, new_status):
-        query = "UPDATE LOAN_APPLICATIONS SET loan_status = %s WHERE loan_id = %s;"
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, (new_status, loan_id))
-                conn.commit()
-
-    # --- DASHBOARD STATS ---
-    def get_total_customers_count(self):
-        try:
-            with self.conn.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM PERSONAL_TABLE;")
-                result = cursor.fetchone()
-                return result[0] if result else 0
-        except:
-            return 0
-
-    def get_active_loans_count(self):
-        try:
-            with self.conn.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM LOAN_APPLICATIONS WHERE status = 'active';")
-                result = cursor.fetchone()
-                return result[0] if result else 0
-        except:
-            return 0
-
-    def get_overdue_loans_count(self):
-        try:
-            with self.conn.cursor() as cursor:
-                query = "SELECT COUNT(*) FROM LOAN_APPLICATIONS WHERE deadline < CURRENT_DATE AND status != 'paid';"
-                cursor.execute(query)
-                result = cursor.fetchone()
-                return result[0] if result else 0
-        except:
-            return 0
-
-    # --- REPORTS ---
-    def get_unpaid_loans(self):
-        query = "SELECT * FROM ALERT_REPORT;"
         with self.get_connection() as conn:
             with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
                 cur.execute(query)
-                return cur.fetchall()
+                return cur.fetchone()
