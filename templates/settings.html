@@ -1,9 +1,33 @@
-<div class="card">
-    <h3>Current Loan Rate Configuration</h3>
-    <form action="/update-rate" method="POST">
-        <label>Rate Percentage (%)</label>
-        <input type="number" step="0.01" name="new_rate" value="{{ current_rate.percentage }}">
-        <button type="submit" class="btn-success">Update Rate</button>
-    </form>
-    <p><small>Note: Changing this only affects NEW loan applications.</small></p>
+{% extends "layout.html" %}
+{% block content %}
+<h2 style="color: var(--primary);">System Control Panel</h2>
+<p>Manage global configurations and staff access.</p>
+
+<div class="stats-grid">
+    <div class="stat-card" style="border-bottom-color: var(--accent);">
+        <h3>Interest Rate Configuration</h3>
+        <form action="/update-rate" method="POST" style="margin-top: 15px;">
+            <label style="display:block; font-size: 0.8rem; margin-bottom: 5px;">Active Rate (%)</label>
+            <input type="number" step="0.01" name="new_rate" 
+                   value="{{ current_rate.percentage }}" 
+                   style="width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px;">
+            
+            <button type="submit" style="background: var(--success); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer;">
+                Update Global Rate
+            </button>
+        </form>
+        <p style="margin-top: 10px;"><small color="#7f8c8d">Note: Existing loans will keep their original rates.</small></p>
+    </div>
+
+    <div class="stat-card" style="border-bottom-color: var(--primary);">
+        <h3>Staff Roles</h3>
+        <ul style="list-style: none; padding: 0; font-size: 0.9rem;">
+            <li style="padding: 5px 0;"><strong>Admins:</strong> Full Access</li>
+            <li style="padding: 5px 0;"><strong>Marketers:</strong> Registration & Apps</li>
+            <li style="padding: 5px 0;"><strong>Approvers:</strong> Verification Only</li>
+            <li style="padding: 5px 0;"><strong>Reporters:</strong> History & Audits</li>
+        </ul>
+        <a href="/manage-users" style="display: block; text-align: center; margin-top: 15px; color: var(--accent); text-decoration: none; font-weight: bold;">Manage Users →</a>
+    </div>
 </div>
+{% endblock %}
