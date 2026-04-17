@@ -21,7 +21,7 @@ class Database:
         finally:
             conn.close()
 
-        def get_dashboard_stats(self):
+    def get_dashboard_stats(self):
             conn = self.get_connection()
             # Default stats to show if things fail
             default_stats = {'user_count': 0, 'active_loans': 0}
