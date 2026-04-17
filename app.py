@@ -32,17 +32,29 @@ def index():
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
-@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         user = db.login_user(username, password)
+        
         if user:
-            session['user'] = user
+            # 1. Save the whole user object if you need it later
+            session['user'] = user 
+            
+            # 2. Extract and save the role specifically for the decorator
+            # This ensures @roles_allowed can find session['role']
+            session['role'] = user['role'] 
+            
+            # 3. Optional: Save the user ID for database queries
+            session['user_id'] = user['id']
+            
             return redirect(url_for('dashboard'))
+            
         flash("Invalid credentials.")
     return render_template('login.html')
+
+
 
 @app.route('/logout')
 def logout():
