@@ -1,0 +1,37 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 style="color: var(--primary);">Unpaid Balances</h2>
+
+<div style="background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead style="background: var(--primary); color: white;">
+            <tr>
+                <th style="padding: 15px;">Loan ID</th>
+                <th style="padding: 15px;">Customer</th>
+                <th style="padding: 15px;">Balance Owed</th>
+                <th style="padding: 15px;">Status</th>
+                <th style="padding: 15px;">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for loan in loans %}
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 15px;">{{ loan.loan_app_id }}</td>
+                <td style="padding: 15px;">{{ loan.first_name }} {{ loan.last_name }}</td>
+                <td style="padding: 15px;">KES {{ "{:,.2f}".format(loan.balance) }}</td>
+                <td style="padding: 15px;">
+                    {% if loan.expected_return_date < today %}
+                        <span style="color: var(--danger); font-weight: bold;">DUE</span>
+                    {% else %}
+                        <span style="color: var(--success);">Active</span>
+                    {% endif %}
+                </td>
+                <td style="padding: 15px;">
+                    <a href="/pay-loan/{{ loan.id }}" style="background: var(--accent); color: white; padding: 8px 15px; border-radius: 6px; text-decoration: none;">Receive Payment</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
