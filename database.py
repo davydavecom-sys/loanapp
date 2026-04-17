@@ -21,18 +21,18 @@ class Database:
         finally:
             conn.close()
 
-    def get_dashboard_stats(self):
-        # Keeps the dashboard from crashing if tables are empty
-        conn = self.get_connection()
-        try:
-            with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT 
-                        (SELECT COUNT(*) FROM users) as user_count,
-                        0 as active_loans 
-                """)
-                return cur.fetchone()
-        except:
-            return {'user_count': 0, 'active_loans': 0}
-        finally:
-            conn.close()
+        def get_dashboard_stats(self):
+            conn = self.get_connection()
+            # Default stats to show if things fail
+            default_stats = {'user_count': 0, 'active_loans': 0}
+            try:
+                with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                    # We wrap this in a try/except so one missing table doesn't kill the app
+                    cur.execute("SELECT COUNT(*) as user_count FROM users")
+                    res = cur.fetchone()
+                    return res if res else default_stats
+            except Exception as e:
+                print(f"Dashboard Query Error: {e}")
+                return default_stats
+            finally:
+                conn.close()
