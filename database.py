@@ -102,31 +102,31 @@ class LoanAppDB:
 
     def record_payment(self, loan_id, amount, flutterwave_ref):
     # Requirement: Generate P_ + 10 character string
-    payment_id = self.generate_payment_id() 
+        payment_id = self.generate_payment_id() 
     
-    query = """
-        INSERT INTO payments (payment_id, loan_id, amount_paid, flutterwave_ref)
-        VALUES (%s, %s, %s, %s);
-    """
-    try:
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query, (payment_id, loan_id, amount, flutterwave_ref))
+        query = """
+            INSERT INTO payments (payment_id, loan_id, amount_paid, flutterwave_ref)
+            VALUES (%s, %s, %s, %s);
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (payment_id, loan_id, amount, flutterwave_ref))
                 
                 # Check if loan is now fully cleared
-                cur.execute("""
-                    SELECT total_to_pay, (SELECT SUM(amount_paid) FROM payments WHERE loan_id = %s)
-                    FROM loan_applications WHERE id = %s
-                """, (loan_id, loan_id))
-                res = cur.fetchone()
-                if res[1] >= res[0]:
-                    cur.execute("UPDATE loan_applications SET loan_status = 'cleared' WHERE id = %s", (loan_id,))
+                    cur.execute("""
+                        SELECT total_to_pay, (SELECT SUM(amount_paid) FROM payments WHERE loan_id = %s)
+                        FROM loan_applications WHERE id = %s
+                    """, (loan_id, loan_id))
+                    res = cur.fetchone()
+                    if res[1] >= res[0]:
+                        cur.execute("UPDATE loan_applications SET loan_status = 'cleared' WHERE id = %s", (loan_id,))
                 
-                conn.commit()
-        return payment_id
-    except Exception as e:
-        print(f"Payment Error: {e}")
-        return None
+                    conn.commit()
+            return payment_id
+        except Exception as e:
+            print(f"Payment Error: {e}")
+            return None
 
 
     def approve_loan(self, app_internal_id, approver_id):
