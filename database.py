@@ -48,7 +48,39 @@ class Database:
                 }
         except Exception as e:
             print(f"Dashboard Query Error: {e}")
+            
             return default_stats
         finally:
             if conn:
                 conn.close()
+
+
+    def add_customer(self, first_name, last_name, phone_number, national_id):
+        conn = self.get_connection()
+        try:
+            with conn.cursor() as cur:
+                # We combine names if your table has a single 'full_name' column
+                full_name = f"{first_name} {last_name}"
+                
+                cur.execute("""
+                    INSERT INTO customers (full_name, phone_number, national_id)
+                    VALUES (%s, %s, %s)
+                    RETURNING customer_id;
+                """, (full_name, phone_number, national_id))
+                
+                customer_id = cur.fetchone()[0]
+                conn.commit()
+                return customer_id
+        except Exception as e:
+            print(f"Error adding customer: {e}")
+            conn.rollback()
+            return None
+        finally:
+            conn.close()
+
+
+
+
+
+
+
