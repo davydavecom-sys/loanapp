@@ -49,9 +49,6 @@ class Database:
         except Exception as e:
             print(f"Dashboard Query Error: {e}")
             return default_stats
-        finally:
-            if conn:
-                conn.close()
                 print(f"Dashboard Query Error: {e}")
                 return default_stats
             finally:
