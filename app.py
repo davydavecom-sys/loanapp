@@ -57,6 +57,28 @@ def dashboard():
         print(f"Dashboard Error: {e}")
         return "Internal Server Error", 500
 
+@app.route('/register_customer', methods=['GET', 'POST'])
+def register_customer():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        f_name = request.form.get('first_name')
+        l_name = request.form.get('last_name')
+        phone = request.form.get('phone')
+        n_id = request.form.get('national_id')
+
+        # Save to database
+        new_id = db.add_customer(f_name, l_name, phone, n_id)
+        
+        if new_id:
+            flash(f"Customer {f_name} registered successfully!", "success")
+            return redirect(url_for('dashboard'))
+        else:
+            flash("Error: Could not register customer. ID might already exist.", "danger")
+
+    return render_template('register_customer.html')
+
 @app.route('/logout')
 def logout():
     session.clear()
