@@ -1,32 +1,21 @@
-{% extends "layout.html" %}
-{% block content %}
-<div style="max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <h2 style="color: var(--primary); margin-bottom: 20px;">Register New Customer</h2>
-    
-    <form method="POST">
-        <div class="form-group" style="margin-bottom: 15px;">
-            <label>First Name</label>
-            <input type="text" name="first_name" required class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-        </div>
+@app.route('/register_customer', methods=['GET', 'POST'])
+def register_customer():
+    if 'user' not in session:
+        return redirect(url_for('login'))
 
-        <div class="form-group" style="margin-bottom: 15px;">
-            <label>Last Name</label>
-            <input type="text" name="last_name" required class="form-control" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-        </div>
+    if request.method == 'POST':
+        f_name = request.form.get('first_name')
+        l_name = request.form.get('last_name')
+        phone = request.form.get('phone')
+        n_id = request.form.get('national_id')
 
-        <div class="form-group" style="margin-bottom: 15px;">
-            <label>National ID Number</label>
-            <input type="text" name="id_number" required class="form-control" placeholder="12345678" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-        </div>
+        # Save to database
+        new_id = db.add_customer(f_name, l_name, phone, n_id)
+        
+        if new_id:
+            flash(f"Customer {f_name} registered successfully!", "success")
+            return redirect(url_for('dashboard'))
+        else:
+            flash("Error: Could not register customer. ID might already exist.", "danger")
 
-        <div class="form-group" style="margin-bottom: 25px;">
-            <label>Phone Number</label>
-            <input type="text" name="phone" required class="form-control" placeholder="0712345678" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
-        </div>
-
-        <button type="submit" style="background: var(--success); color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%;">
-            Create Customer Record
-        </button>
-    </form>
-</div>
-{% endblock %}
+    return render_template('register_customer.html')
