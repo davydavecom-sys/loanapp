@@ -23,33 +23,39 @@ class Database:
 
     def get_dashboard_stats(self):
         conn = self.get_connection()
-        default_stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0}
+        # Initial default values
+        stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0}
+        
         try:
             with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                # Get count of users
-                cur.execute("SELECT COUNT(*) as user_count FROM users")
-                users = cur.fetchone()
+                # 1. Count Users
+                try:
+                    cur.execute("SELECT COUNT(*) as count FROM users")
+                    res = cur.fetchone()
+                    stats['user_count'] = res['count'] if res else 0
+                except:
+                    conn.rollback() # Table might not exist yet
 
-                # Get count of active loans and total amount from the 'loans' table
-                # Assuming 'status' column exists based on your schema
-                cur.execute("""
-                    SELECT 
-                        COUNT(*) as active_loans, 
-                        SUM(loan_amount) as total_value 
-                    FROM loans 
-                    WHERE status = 'active'
-                """)
-                loans = cur.fetchone()
+                # 2. Count Active Loans and Sum Amount
+                try:
+                    cur.execute("""
+                        SELECT 
+                            COUNT(*) as count, 
+                            COALESCE(SUM(loan_amount), 0) as total 
+                        FROM loans 
+                        WHERE status = 'active'
+                    """)
+                    res = cur.fetchone()
+                    if res:
+                        stats['active_loans'] = res['count']
+                        stats['total_loan_value'] = res['total']
+                except:
+                    conn.rollback() # Table might not exist yet
 
-                return {
-                    'user_count': users['user_count'] if users else 0,
-                    'active_loans': loans['active_loans'] if loans else 0,
-                    'total_loan_value': loans['total_value'] if loans['total_value'] else 0
-                }
+                return stats
         except Exception as e:
-            print(f"Dashboard Query Error: {e}")
-            
-            return default_stats
+            print(f"General Dashboard Error: {e}")
+            return stats
         finally:
             if conn:
                 conn.close()
