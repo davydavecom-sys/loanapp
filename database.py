@@ -22,16 +22,36 @@ class Database:
             conn.close()
 
     def get_dashboard_stats(self):
-            conn = self.get_connection()
-            # Default stats to show if things fail
-            default_stats = {'user_count': 0, 'active_loans': 0}
-            try:
-                with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                    # We wrap this in a try/except so one missing table doesn't kill the app
-                    cur.execute("SELECT COUNT(*) as user_count FROM users")
-                    res = cur.fetchone()
-                    return res if res else default_stats
-            except Exception as e:
+        conn = self.get_connection()
+        default_stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0}
+        try:
+            with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+                # Get count of users
+                cur.execute("SELECT COUNT(*) as user_count FROM users")
+                users = cur.fetchone()
+
+                # Get count of active loans and total amount from the 'loans' table
+                # Assuming 'status' column exists based on your schema
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) as active_loans, 
+                        SUM(loan_amount) as total_value 
+                    FROM loans 
+                    WHERE status = 'active'
+                """)
+                loans = cur.fetchone()
+
+                return {
+                    'user_count': users['user_count'] if users else 0,
+                    'active_loans': loans['active_loans'] if loans else 0,
+                    'total_loan_value': loans['total_value'] if loans['total_value'] else 0
+                }
+        except Exception as e:
+            print(f"Dashboard Query Error: {e}")
+            return default_stats
+        finally:
+            if conn:
+                conn.close()
                 print(f"Dashboard Query Error: {e}")
                 return default_stats
             finally:
