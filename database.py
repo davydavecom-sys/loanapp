@@ -1,92 +1,83 @@
 import psycopg2
 from psycopg2 import extras
+import os
 
 class Database:
     def __init__(self, db_url):
-        self.db_url = db_url
+        # Ensure the URL is clean. Render/Supabase sometimes need 'postgresql://'
+        if db_url and db_url.startswith("postgres://"):
+            self.db_url = db_url.replace("postgres://", "postgresql://", 1)
+        else:
+            self.db_url = db_url
 
     def get_connection(self):
+        # Direct connection without extra logic to prevent recursion
         return psycopg2.connect(self.db_url)
 
     def get_user_by_username(self, username):
-        conn = self.get_connection()
+        conn = None
         try:
+            conn = self.get_connection()
             with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                # We use LOWER() to make the username case-insensitive
                 cur.execute("SELECT * FROM users WHERE LOWER(username) = LOWER(%s)", (username,))
                 return cur.fetchone()
         except Exception as e:
-            print(f"Database Error: {e}")
+            print(f"Login Error: {e}")
             return None
         finally:
-            conn.close()
+            if conn:
+                conn.close()
 
     def get_dashboard_stats(self):
-        conn = self.get_connection()
-        # Initial default values
+        conn = None
         stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0}
-        
         try:
+            conn = self.get_connection()
             with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                # 1. Count Users
-                try:
-                    cur.execute("SELECT COUNT(*) as count FROM users")
-                    res = cur.fetchone()
-                    stats['user_count'] = res['count'] if res else 0
-                except:
-                    conn.rollback() # Table might not exist yet
+                # Get user count
+                cur.execute("SELECT COUNT(*) as count FROM users")
+                u_res = cur.fetchone()
+                if u_res: stats['user_count'] = u_res['count']
 
-                # 2. Count Active Loans and Sum Amount
-                try:
-                    cur.execute("""
-                        SELECT 
-                            COUNT(*) as count, 
-                            COALESCE(SUM(loan_amount), 0) as total 
-                        FROM loans 
-                        WHERE status = 'active'
-                    """)
-                    res = cur.fetchone()
-                    if res:
-                        stats['active_loans'] = res['count']
-                        stats['total_loan_value'] = res['total']
-                except:
-                    conn.rollback() # Table might not exist yet
-
-                return stats
+                # Get loan stats - COALESCE prevents 'None' errors
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) as count, 
+                        COALESCE(SUM(loan_amount), 0) as total 
+                    FROM loans 
+                    WHERE status = 'active'
+                """)
+                l_res = cur.fetchone()
+                if l_res:
+                    stats['active_loans'] = l_res['count']
+                    stats['total_loan_value'] = l_res['total']
+                    
+            return stats
         except Exception as e:
-            print(f"General Dashboard Error: {e}")
+            print(f"Dashboard Stats Error: {e}")
             return stats
         finally:
             if conn:
                 conn.close()
 
-
     def add_customer(self, first_name, last_name, phone_number, national_id):
-        conn = self.get_connection()
+        conn = None
         try:
+            conn = self.get_connection()
             with conn.cursor() as cur:
-                # We combine names if your table has a single 'full_name' column
                 full_name = f"{first_name} {last_name}"
-                
                 cur.execute("""
                     INSERT INTO customers (full_name, phone_number, national_id)
                     VALUES (%s, %s, %s)
                     RETURNING customer_id;
                 """, (full_name, phone_number, national_id))
-                
-                customer_id = cur.fetchone()[0]
+                cust_id = cur.fetchone()[0]
                 conn.commit()
-                return customer_id
+                return cust_id
         except Exception as e:
-            print(f"Error adding customer: {e}")
-            conn.rollback()
+            print(f"Add Customer Error: {e}")
+            if conn: conn.rollback()
             return None
         finally:
-            conn.close()
-
-
-
-
-
-
-
+            if conn:
+                conn.close()
