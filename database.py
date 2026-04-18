@@ -33,28 +33,32 @@ class Database:
         try:
             conn = self.get_connection()
             with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-                # 1. Get staff user count
+                # 1. Staff Count
                 cur.execute("SELECT COUNT(*) as count FROM users")
                 u_res = cur.fetchone()
                 if u_res: stats['user_count'] = u_res['count']
 
-                # 2. Get loan stats from loan_applications
-                # Using COALESCE to ensure we don't return 'None' to Flask
-                cur.execute("""
-                    SELECT 
-                        COUNT(*) as count, 
-                        COALESCE(SUM(loan_amount), 0) as total 
-                    FROM loan_applications 
-                    WHERE status = 'approved' OR status = 'active'
-                """)
-                l_res = cur.fetchone()
-                if l_res:
-                    stats['active_loans'] = l_res['count']
-                    stats['total_loan_value'] = l_res['total']
+                # 2. Loan Stats using 'amount_requested'
+                # Using status IN ('approved', 'active') to cover both states
+                try:
+                    cur.execute("""
+                        SELECT 
+                            COUNT(*) as count, 
+                            COALESCE(SUM(amount_requested), 0) as total 
+                        FROM loan_applications 
+                        WHERE status IN ('approved', 'active', 'Approved', 'Active')
+                    """)
+                    l_res = cur.fetchone()
+                    if l_res:
+                        stats['active_loans'] = l_res['count']
+                        stats['total_loan_value'] = l_res['total']
+                except Exception as e:
+                    print(f"Table Column Error: {e}")
+                    conn.rollback() # Important to reset the connection after a failed query
                     
             return stats
         except Exception as e:
-            print(f"Dashboard Stats Error: {e}")
+            print(f"General Stats Error: {e}")
             return stats
         finally:
             if conn:
