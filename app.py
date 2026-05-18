@@ -210,24 +210,33 @@ def login():
     return render_template('login.html')
 
 
+
+
 @app.route('/dashboard')
 def dashboard():
-    # If session is empty, go DIRECTLY to login. Do not go to index('/').
+    # 1. Access Guard
     if 'user' not in session:
         return redirect(url_for('login'))
     
     try:
+        # 2. Fetch data from our safely-wrapped stats function
         stats = get_dashboard_stats()
-        # Fallback if stats returns None to prevent page crash
-        if not stats:
-            stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0}
-            
-        return render_template('dashboard.html', stats=stats, current_user=session['user'])
+        
+        # 3. Extra Safety Net: Ensure no raw Decimal types leak into the template
+        safe_stats = {
+            'user_count': int(stats.get('user_count', 0)),
+            'active_loans': int(stats.get('active_loans', 0)),
+            'total_loan_value': float(stats.get('total_loan_value', 0.0))
+        }
+        
+        return render_template('dashboard.html', stats=safe_stats, current_user=session['user'])
+        
     except Exception as e:
-        print(f"Dashboard Runtime Error: {e}")
-        # Clear session on hard crash to prevent stuck loops
-        session.clear()
-        return "Internal Error parsing statistical entries.", 500
+        # This will print the exact culprit line to your Render Logs
+        print(f"CRITICAL Dashboard Route Crash: {e}")
+        return f"Internal Error parsing statistical entries. Details logged.", 500
+
+    
 @app.route('/customer/add', methods=['POST'])
 def web_add_customer():
     if 'user' not in session:
