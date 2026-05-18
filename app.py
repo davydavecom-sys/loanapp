@@ -165,12 +165,15 @@ def get_dashboard_stats():
 
 @app.route('/')
 def index():
+    # If logged in, go to dashboard. If not, go STRICTLY to login.
     if 'user' in session:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # If they are already logged in, don't let them see the login page
     if 'user' in session:
         return redirect(url_for('dashboard'))
 
@@ -190,20 +193,28 @@ def login():
         else:
             flash("Invalid operational credentials supplied.", "danger")
             
+    # CRITICAL: Ensure your template file is named EXACTLY 'login.html'
     return render_template('login.html')
+
 
 @app.route('/dashboard')
 def dashboard():
+    # If session is empty, go DIRECTLY to login. Do not go to index('/').
     if 'user' not in session:
         return redirect(url_for('login'))
     
     try:
         stats = get_dashboard_stats()
+        # Fallback if stats returns None to prevent page crash
+        if not stats:
+            stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0}
+            
         return render_template('dashboard.html', stats=stats, current_user=session['user'])
     except Exception as e:
         print(f"Dashboard Runtime Error: {e}")
+        # Clear session on hard crash to prevent stuck loops
+        session.clear()
         return "Internal Error parsing statistical entries.", 500
-
 @app.route('/customer/add', methods=['POST'])
 def web_add_customer():
     if 'user' not in session:
