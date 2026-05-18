@@ -1,35 +1,73 @@
-{% extends "layout.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loan Management System - Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
 
-{% block content %}
-<div class="card">
-    <div class="card-header bg-primary text-white">
-        <h3>System Overview</h3>
-    </div>
-    <div class="card-body">
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">Loan System Dashboard</span>
+            <div class="d-flex align-items-center">
+                <span class="text-white me-3">Welcome, <strong>{{ current_user.get('username', 'User') }}</strong> ({{ current_user.get('role', 'staff') }})</span>
+                <a href="/logout" class="btn btn-sm btn-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row g-4 mb-5">
+            <div class="col-md-4">
+                <div class="card text-center shadow-sm h-100">
+                    <div class="card-body">
+                        <h5 class="card-title text-muted">System Users</h5>
+                        <p class="display-5 fw-bold text-primary">{{ stats.user_count }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center shadow-sm h-100">
+                    <div class="card-body">
+                        <h5 class="card-title text-muted">Active Granted Loans</h5>
+                        <p class="display-5 fw-bold text-success">{{ stats.active_loans }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center shadow-sm h-100">
+                    <div class="card-body">
+                        <h5 class="card-title text-muted">Total Portfolio Value</h5>
+                        <p class="display-5 fw-bold text-dark">KES {{ "{:,.2f}".format(stats.total_loan_value) }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="row">
-            <div class="col-md-6">
-                <div class="card text-center border-info mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Total Users</h5>
-                        <p class="display-4">{{ stats.user_count if stats else 0 }}</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card text-center border-success mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Active Loans</h5>
-                        <p class="display-4">{{ stats.active_loans if stats else 0 }}</p>
-                    </div>
+            <div class="col-12">
+                <div class="p-5 bg-white rounded shadow-sm">
+                    <h3>System Operational Modules</h3>
+                    <p class="text-muted">Database connectivity verified. Core structural data streaming accurately from Supabase backend cloud ledger.</p>
                 </div>
             </div>
         </div>
 
-        <div class="mt-4">
-            <h5>Quick Actions</h5>
-            <hr>
-            <p>Welcome to the Meru Loan Management Dashboard. Use the sidebar to navigate through the system functions.</p>
-        </div>
     </div>
-</div>
-{% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
