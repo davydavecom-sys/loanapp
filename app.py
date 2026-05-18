@@ -132,44 +132,64 @@ def process_payment(transaction_code, payment_amount, customer_id, loan_id):
 
 def get_dashboard_stats():
     conn = None
-    # Safe defaults so the dashboard always renders
-    stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0}
+    # 1. Hardcoded, un-loopable safe defaults
+    stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0.0}
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-            # 1. Fetch User Count
+            
+            # Simple, isolated user check
             try:
-                cur.execute("SELECT COUNT(*) as count FROM users")
+                cur.execute("SELECT COUNT(*)::integer as count FROM users")
                 u_res = cur.fetchone()
                 if u_res: stats['user_count'] = u_res['count']
             except Exception as ue:
-                print(f"Error fetching user count: {ue}")
-                conn.rollback() # Reset connection state
+                print(f"Stats User Query Failed: {ue}")
+                # Do NOT call any other functions here. Just print.
 
-            # 2. Fetch Loan Metrics safely
+            # Simple, isolated loan check
             try:
-                # We check both 'granted' and 'Active' just in case of state string differences
                 cur.execute("""
                     SELECT 
-                        COUNT(*) as count, 
-                        COALESCE(SUM(amount_payable), 0) as total 
+                        COUNT(*)::integer as count, 
+                        COALESCE(SUM(amount_payable), 0)::float as total 
                     FROM loans 
                     WHERE LOWER(loan_state) IN ('granted', 'active')
                 """)
                 l_res = cur.fetchone()
                 if l_res:
                     stats['active_loans'] = l_res['count']
-                    stats['total_loan_value'] = float(l_res['total']) # Force to float for JSON safety
+                    stats['total_loan_value'] = l_res['total']
             except Exception as le:
-                print(f"Error fetching loan metrics: {le}")
-                conn.rollback()
+                print(f"Stats Loan Query Failed: {le}")
                 
         return stats
     except Exception as e:
-        print(f"General Database Connection Error in stats: {e}")
-        return stats
+        print(f"Database Connection completely failed in stats: {e}")
+        return stats  # Returns zeros safely, avoiding loops
     finally:
         if conn: conn.close()
+
+
+@app.route('/dashboard')
+def dashboard():
+    # 1. Strict Access Guard
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    
+    # 2. Flattened Data Fetch (No deep try/except blocks that redirect)
+    stats_data = get_dashboard_stats()
+    
+    # 3. Handle Template Rendering with a direct return string backup if it fails
+    try:
+        return render_template(
+            'dashboard.html', 
+            stats=stats_data, 
+            current_user=session.get('user', {})
+        )
+    except Exception as template_err:
+        print(f"Template Rendering Failed: {template_err}")
+        return f"Dashboard loaded, but HTML rendering failed. Data: {stats_data}", 500
 
 
 # -----------------------------------------------------------------------------
@@ -212,29 +232,6 @@ def login():
 
 
 
-@app.route('/dashboard')
-def dashboard():
-    # 1. Access Guard
-    if 'user' not in session:
-        return redirect(url_for('login'))
-    
-    try:
-        # 2. Fetch data from our safely-wrapped stats function
-        stats = get_dashboard_stats()
-        
-        # 3. Extra Safety Net: Ensure no raw Decimal types leak into the template
-        safe_stats = {
-            'user_count': int(stats.get('user_count', 0)),
-            'active_loans': int(stats.get('active_loans', 0)),
-            'total_loan_value': float(stats.get('total_loan_value', 0.0))
-        }
-        
-        return render_template('dashboard.html', stats=safe_stats, current_user=session['user'])
-        
-    except Exception as e:
-        # This will print the exact culprit line to your Render Logs
-        print(f"CRITICAL Dashboard Route Crash: {e}")
-        return f"Internal Error parsing statistical entries. Details logged.", 500
 
     
 @app.route('/customer/add', methods=['POST'])
