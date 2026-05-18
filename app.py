@@ -132,28 +132,41 @@ def process_payment(transaction_code, payment_amount, customer_id, loan_id):
 
 def get_dashboard_stats():
     conn = None
+    # Safe defaults so the dashboard always renders
     stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0}
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-            cur.execute("SELECT COUNT(*) as count FROM users")
-            u_res = cur.fetchone()
-            if u_res: stats['user_count'] = u_res['count']
+            # 1. Fetch User Count
+            try:
+                cur.execute("SELECT COUNT(*) as count FROM users")
+                u_res = cur.fetchone()
+                if u_res: stats['user_count'] = u_res['count']
+            except Exception as ue:
+                print(f"Error fetching user count: {ue}")
+                conn.rollback() # Reset connection state
 
-            cur.execute("""
-                SELECT 
-                    COUNT(*) as count, 
-                    COALESCE(SUM(amount_payable), 0) as total 
-                FROM loans 
-                WHERE loan_state = 'granted'
-            """)
-            l_res = cur.fetchone()
-            if l_res:
-                stats['active_loans'] = l_res['count']
-                stats['total_loan_value'] = l_res['total']
+            # 2. Fetch Loan Metrics safely
+            try:
+                # We check both 'granted' and 'Active' just in case of state string differences
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) as count, 
+                        COALESCE(SUM(amount_payable), 0) as total 
+                    FROM loans 
+                    WHERE LOWER(loan_state) IN ('granted', 'active')
+                """)
+                l_res = cur.fetchone()
+                if l_res:
+                    stats['active_loans'] = l_res['count']
+                    stats['total_loan_value'] = float(l_res['total']) # Force to float for JSON safety
+            except Exception as le:
+                print(f"Error fetching loan metrics: {le}")
+                conn.rollback()
+                
         return stats
     except Exception as e:
-        print(f"DB Error (Stats Fetch): {e}")
+        print(f"General Database Connection Error in stats: {e}")
         return stats
     finally:
         if conn: conn.close()
