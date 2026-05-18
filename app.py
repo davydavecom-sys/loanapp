@@ -25,7 +25,7 @@ def login():
         user = db.get_user_by_username(username)
 
         # PLAIN TEXT CHECK (for debugging/initial setup)
-        if user and user['password_hash'] == password_attempt:
+        if user and user['password'] == password_attempt:
             # We store the data in a 'user' dictionary to match your HTML:
             # {{ session['user']['username'] }}
             session['user'] = {
