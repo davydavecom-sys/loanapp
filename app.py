@@ -132,22 +132,30 @@ def process_payment(transaction_code, payment_amount, customer_id, loan_id):
 
 def get_dashboard_stats():
     conn = None
-    # 1. Hardcoded, un-loopable safe defaults
-    stats = {'user_count': 0, 'active_loans': 0, 'total_loan_value': 0.0}
+    # Add customer_count to our safe defaults
+    stats = {'user_count': 0, 'customer_count': 0, 'active_loans': 0, 'total_loan_value': 0.0}
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             
-            # Simple, isolated user check
+            # 1. Fetch User Count
             try:
                 cur.execute("SELECT COUNT(*)::integer as count FROM users")
                 u_res = cur.fetchone()
                 if u_res: stats['user_count'] = u_res['count']
             except Exception as ue:
                 print(f"Stats User Query Failed: {ue}")
-                # Do NOT call any other functions here. Just print.
 
-            # Simple, isolated loan check
+            # 2. NEW: Fetch Total Customers Onboarded
+            try:
+                cur.execute("SELECT COUNT(*)::integer as count FROM customers")
+                c_res = cur.fetchone()
+                if c_res: stats['customer_count'] = c_res['count']
+            except Exception as ce:
+                print(f"Stats Customer Query Failed: {ce}")
+                conn.rollback()
+
+            # 3. Fetch Loan Metrics safely
             try:
                 cur.execute("""
                     SELECT 
@@ -166,7 +174,7 @@ def get_dashboard_stats():
         return stats
     except Exception as e:
         print(f"Database Connection completely failed in stats: {e}")
-        return stats  # Returns zeros safely, avoiding loops
+        return stats
     finally:
         if conn: conn.close()
 
