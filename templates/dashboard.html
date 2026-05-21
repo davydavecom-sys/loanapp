@@ -13,9 +13,10 @@
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1"><i class="bi bi-bank2 me-2"></i>Microfinance Ledger Pro</span>
             <div class="d-flex align-items-center">
+                <a href="/loan/apply" class="btn btn-sm btn-success me-3"><i class="bi bi-plus-circle me-1"></i>Apply for Loan</a>
+                
                 <span class="text-white-50 me-3">
                     Active Session: <strong class="text-white">{{ current_user.get('username', 'User') }}</strong> 
-                    <span class="badge bg-secondary ms-1">{{ current_user.get('role', 'staff') | upper }}</span>
                 </span>
                 <a href="/logout" class="btn btn-sm btn-outline-danger"><i class="bi bi-box-arrow-right me-1"></i>Logout</a>
             </div>
