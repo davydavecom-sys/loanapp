@@ -17,7 +17,7 @@
                 <a href="/loan/apply" class="btn btn-sm btn-success me-3 fw-semibold"><i class="bi bi-plus-circle me-1"></i>Apply for Loan</a>
                 
                 <span class="text-white-50 me-3">
-                    Active Session: <strong class="text-white">{{ current_user.get('username', 'User') }}</strong> 
+                    Active Officer: <strong class="text-white">{{ current_user.get('username', 'User') }}</strong> 
                 </span>
                 <a href="/logout" class="btn btn-sm btn-outline-danger"><i class="bi bi-box-arrow-right me-1"></i>Logout</a>
             </div>
@@ -98,7 +98,7 @@
 
         <div class="row g-4">
             
-            <div class="col-md-4">
+            <div class="col-md-6">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white border-0 pt-3 pb-0">
                         <h5 class="card-title fw-bold text-dark mb-0"><i class="bi bi-person-plus-fill me-2 text-primary"></i>Onboard Customer</h5>
@@ -130,44 +130,34 @@
                 </div>
             </div>
 
-            <div class="col-md-4">
+            <div class="col-md-6">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white border-0 pt-3 pb-0">
-                        <h5 class="card-title fw-bold text-dark mb-0"><i class="bi bi-cash-coin me-2 text-success"></i>Originate Loan</h5>
-                        <p class="text-muted small">Deploy financial entries to an onboarded client</p>
+                        <h5 class="card-title fw-bold text-dark mb-0"><i class="bi bi-phone-vibrate me-2 text-dark"></i>Trigger M-Pesa Payment</h5>
+                        <p class="text-muted small">Pops up a direct automated STK PIN entry menu challenge on customer handset</p>
                     </div>
                     <div class="card-body">
-                        <form action="/loan/issue" method="POST">
+                        <form action="/payment/receive" method="POST">
                             <div class="mb-3">
-                                <label class="form-label small fw-semibold">Customer Database UUID</label>
-                                <input type="text" name="customer_id" class="form-control" placeholder="Paste Customer UUID here" required>
-                            </div>
-                            <div class="row g-2 mb-3">
-                                <div class="col">
-                                    <label class="form-label small fw-semibold">Client First Name</label>
-                                    <input type="text" name="first_name" class="form-control" required>
-                                </div>
-                                <div class="col">
-                                    <label class="form-label small fw-semibold">Client Last Name</label>
-                                    <input type="text" name="last_name" class="form-control" required>
-                                </div>
-                            </div>
-                            <div class="row g-2 mb-3">
-                                <div class="col">
-                                    <label class="form-label small fw-semibold">Principal Amount</label>
-                                    <input type="number" step="0.01" name="loan_amount" class="form-control" placeholder="Principal" required>
-                                </div>
-                                <div class="col">
-                                    <label class="form-label small fw-semibold">Interest Charged</label>
-                                    <input type="number" step="0.01" name="loan_interest" class="form-control" placeholder="Interest" required>
-                                </div>
+                                <label class="form-label small fw-semibold">Amount to Request (KES)</label>
+                                <input type="number" step="1" name="payment_amount" class="form-control" placeholder="e.g., 500" required>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label small fw-semibold">Initial Approval State</label>
-                                <select name="loan_state" class="form-select">
-                                    <option value="pending">Pending Review</option>
-                                    <option value="granted">Granted (Activates Balances)</option>
-                                    <option value="rejected">Rejected</option>
-                                </select>
+                                <label class="form-label small fw-semibold">Target Loan UUID</label>
+                                <input type="text" name="loan_id" class="form-control" placeholder="Paste Master Loan UUID" required>
                             </div>
-                            <button type="submit" class="btn btn-success w-
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Target Customer UUID</label>
+                                <input type="text" name="customer_id" class="form-control" placeholder="Paste Client Profile UUID" required>
+                            </div>
+                            <button type="submit" class="btn btn-dark w-100 fw-semibold"><i class="bi bi-send-fill me-2"></i>Send STK Push Request</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div> </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
