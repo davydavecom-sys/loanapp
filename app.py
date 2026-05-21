@@ -4,18 +4,15 @@ import psycopg2
 from psycopg2 import extras
 import os
 
-load_dotenv()
-
-app = Flask(__name__)
-
-# Security: Using a default for local dev, but Render will use the Environment Variable
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'meru_dev_secret_2026')
-
 # -----------------------------------------------------------------------------
 # 1. INITIALIZATION & CONFIGURATION
 # -----------------------------------------------------------------------------
+load_dotenv()
 
-# Clean the DATABASE_URL environment variable for compatibility
+app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "system_development_key_local_5541")
+
+# Clean the DATABASE_URL environment variable for cloud hosting compatibility
 raw_db_url = os.getenv("DATABASE_URL")
 if raw_db_url and raw_db_url.startswith("postgres://"):
     DATABASE_URL = raw_db_url.replace("postgres://", "postgresql://", 1)
@@ -23,11 +20,12 @@ else:
     DATABASE_URL = raw_db_url
 
 def get_db_connection():
-    """Helper function to create a new database connection."""
+    """Establishes an isolated atomic link connection to Supabase."""
     return psycopg2.connect(DATABASE_URL)
 
+
 # -----------------------------------------------------------------------------
-# 2. DATABASE OPERATIONS (Formerly database.py)
+# 2. RAW DATABASE OPERATIONS & SQL CONTROLS
 # -----------------------------------------------------------------------------
 
 def get_user_by_username(username):
@@ -68,7 +66,7 @@ def create_loan(customer_id, first_name, last_name, loan_amount, loan_interest, 
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            # amount_payable is generated automatically by PostgreSQL
+            # Note: amount_payable is generated automatically by your PostgreSQL table formula
             cur.execute("""
                 INSERT INTO loans (customer_id, first_name, last_name, loan_amount, loan_interest, loan_state)
                 VALUES (%s, %s, %s, %s, %s, %s)
@@ -79,6 +77,7 @@ def create_loan(customer_id, first_name, last_name, loan_amount, loan_interest, 
             loan_id = res[0]
             amount_payable = res[1]
 
+            # If instantly granted, set up the initial tracking balance entry sheets
             if loan_state.lower() == 'granted':
                 cur.execute("""
                     INSERT INTO loan_balances (loan_id, status, amount_payable, paid, balance)
@@ -99,11 +98,13 @@ def process_payment(transaction_code, payment_amount, customer_id, loan_id):
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
+            # 1. Log payment event to the audit ledger
             cur.execute("""
                 INSERT INTO payment_transactions (transaction_code, payment_amount, customer_id, loan_id)
                 VALUES (%s, %s, %s, %s);
             """, (transaction_code.upper().strip(), payment_amount, customer_id, loan_id))
 
+            # 2. Adjust live systemic tracked remaining balances
             cur.execute("""
                 UPDATE loan_balances
                 SET 
@@ -114,6 +115,7 @@ def process_payment(transaction_code, payment_amount, customer_id, loan_id):
                 WHERE loan_id = %s;
             """, (payment_amount, payment_amount, payment_amount, loan_id))
 
+            # 3. Synchronize status back to master loan ledger records
             cur.execute("""
                 UPDATE loans 
                 SET loan_state = CASE WHEN (SELECT balance FROM loan_balances WHERE loan_id = %s) <= 0 
@@ -132,13 +134,12 @@ def process_payment(transaction_code, payment_amount, customer_id, loan_id):
 
 def get_dashboard_stats():
     conn = None
-    # Add customer_count to our safe defaults
     stats = {'user_count': 0, 'customer_count': 0, 'active_loans': 0, 'total_loan_value': 0.0}
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             
-            # 1. Fetch User Count
+            # Fetch Officers Count
             try:
                 cur.execute("SELECT COUNT(*)::integer as count FROM users")
                 u_res = cur.fetchone()
@@ -146,7 +147,7 @@ def get_dashboard_stats():
             except Exception as ue:
                 print(f"Stats User Query Failed: {ue}")
 
-            # 2. NEW: Fetch Total Customers Onboarded
+            # Fetch Onboarded Customers Count
             try:
                 cur.execute("SELECT COUNT(*)::integer as count FROM customers")
                 c_res = cur.fetchone()
@@ -155,7 +156,7 @@ def get_dashboard_stats():
                 print(f"Stats Customer Query Failed: {ce}")
                 conn.rollback()
 
-            # 3. Fetch Loan Metrics safely
+            # Fetch Financial Analytics Metrics
             try:
                 cur.execute("""
                     SELECT 
@@ -179,34 +180,12 @@ def get_dashboard_stats():
         if conn: conn.close()
 
 
-@app.route('/dashboard')
-def dashboard():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-    
-    stats_data = get_dashboard_stats()
-    
-    # Explicitly mapping safe data types to avoid Jinja conversion crashes
-    safe_stats = {
-        'user_count': int(stats_data.get('user_count', 0)),
-        'customer_count': int(stats_data.get('customer_count', 0)), # Added this line
-        'active_loans': int(stats_data.get('active_loans', 0)),
-        'total_loan_value': float(stats_data.get('total_loan_value', 0.0))
-    }
-    
-    try:
-        return render_template('dashboard.html', stats=safe_stats, current_user=session.get('user', {}))
-    except Exception as template_err:
-        print(f"Template Rendering Failed: {template_err}")
-        return f"Dashboard loaded, but HTML rendering failed. Data: {safe_stats}", 500
-
 # -----------------------------------------------------------------------------
-# 3. FLASK WEB APPLICATION ROUTES
+# 3. FLASK WEB APPLICATION ROUTING LAYER
 # -----------------------------------------------------------------------------
 
 @app.route('/')
 def index():
-    # If logged in, go to dashboard. If not, go STRICTLY to login.
     if 'user' in session:
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
@@ -214,7 +193,6 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    # If they are already logged in, don't let them see the login page
     if 'user' in session:
         return redirect(url_for('dashboard'))
 
@@ -234,14 +212,31 @@ def login():
         else:
             flash("Invalid operational credentials supplied.", "danger")
             
-    # CRITICAL: Ensure your template file is named EXACTLY 'login.html'
     return render_template('login.html')
 
 
-
-
-
+@app.route('/dashboard')
+def dashboard():
+    if 'user' not in session:
+        return redirect(url_for('login'))
     
+    stats_data = get_dashboard_stats()
+    
+    # Clean mapping casting layer to enforce type safety during template parsing
+    safe_stats = {
+        'user_count': int(stats_data.get('user_count', 0)),
+        'customer_count': int(stats_data.get('customer_count', 0)),
+        'active_loans': int(stats_data.get('active_loans', 0)),
+        'total_loan_value': float(stats_data.get('total_loan_value', 0.0))
+    }
+    
+    try:
+        return render_template('dashboard.html', stats=safe_stats, current_user=session.get('user', {}))
+    except Exception as template_err:
+        print(f"Template Rendering Failed: {template_err}")
+        return f"Dashboard loaded, but HTML rendering failed. Data: {safe_stats}", 500
+
+
 @app.route('/customer/add', methods=['POST'])
 def web_add_customer():
     if 'user' not in session:
@@ -261,8 +256,20 @@ def web_add_customer():
         
     return redirect(url_for('dashboard'))
 
+
+# --- SEPARATED LOAN APPLICATION WORKFLOW VIEWS ---
+
+@app.route('/loan/apply', methods=['GET'])
+def loan_apply_page():
+    """Renders the dedicated standalone loan request view file page."""
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    return render_template('apply_loan.html', current_user=session.get('user', {}))
+
+
 @app.route('/loan/issue', methods=['POST'])
 def web_issue_loan():
+    """Processes the save button action data entries from apply_loan.html form."""
     if 'user' not in session:
         return redirect(url_for('login'))
         
@@ -275,11 +282,12 @@ def web_issue_loan():
     
     loan_id = create_loan(customer_id, first_name, last_name, loan_amount, loan_interest, loan_state)
     if loan_id:
-        flash(f"Loan record entry processing successfully matched state: {loan_state}!", "success")
+        flash(f"Loan record successfully saved with state: {loan_state}!", "success")
     else:
-        flash("Failed to register loan entry.", "danger")
+        flash("Failed to register loan entry. Verify Customer UUID exists.", "danger")
         
     return redirect(url_for('dashboard'))
+
 
 @app.route('/payment/receive', methods=['POST'])
 def web_receive_payment():
@@ -300,38 +308,11 @@ def web_receive_payment():
     return redirect(url_for('dashboard'))
 
 
-@app.route('/loan/apply', methods=['GET'])
-def loan_apply_page():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-    # Renders the dedicated loan application form page
-    return render_template('apply_loan.html', current_user=session.get('user', {}))
-
-
-@app.route('/loan/issue', methods=['POST'])
-def web_issue_loan():
-    if 'user' not in session:
-        return redirect(url_for('login'))
-        
-    customer_id = request.form.get('customer_id')
-    first_name = request.form.get('first_name')
-    last_name = request.form.get('last_name')
-    loan_amount = float(request.form.get('loan_amount', 0))
-    loan_interest = float(request.form.get('loan_interest', 0))
-    loan_state = request.form.get('loan_state', 'pending')
-    
-    loan_id = create_loan(customer_id, first_name, last_name, loan_amount, loan_interest, loan_state)
-    if loan_id:
-        flash(f"Loan record successfully saved with state: {loan_state}!", "success")
-    else:
-        flash("Failed to register loan entry. Verify Customer UUID exists.", "danger")
-        
-    return redirect(url_for('dashboard'))
-
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
