@@ -181,24 +181,24 @@ def get_dashboard_stats():
 
 @app.route('/dashboard')
 def dashboard():
-    # 1. Strict Access Guard
     if 'user' not in session:
         return redirect(url_for('login'))
     
-    # 2. Flattened Data Fetch (No deep try/except blocks that redirect)
     stats_data = get_dashboard_stats()
     
-    # 3. Handle Template Rendering with a direct return string backup if it fails
+    # Explicitly mapping safe data types to avoid Jinja conversion crashes
+    safe_stats = {
+        'user_count': int(stats_data.get('user_count', 0)),
+        'customer_count': int(stats_data.get('customer_count', 0)), # Added this line
+        'active_loans': int(stats_data.get('active_loans', 0)),
+        'total_loan_value': float(stats_data.get('total_loan_value', 0.0))
+    }
+    
     try:
-        return render_template(
-            'dashboard.html', 
-            stats=stats_data, 
-            current_user=session.get('user', {})
-        )
+        return render_template('dashboard.html', stats=safe_stats, current_user=session.get('user', {}))
     except Exception as template_err:
         print(f"Template Rendering Failed: {template_err}")
-        return f"Dashboard loaded, but HTML rendering failed. Data: {stats_data}", 500
-
+        return f"Dashboard loaded, but HTML rendering failed. Data: {safe_stats}", 500
 
 # -----------------------------------------------------------------------------
 # 3. FLASK WEB APPLICATION ROUTES
