@@ -3,6 +3,10 @@ from dotenv import load_dotenv
 import psycopg2
 from psycopg2 import extras
 import os
+import base64
+from datetime import datetime
+import requests
+from requests.auth import HTTPBasicAuth
 
 # -----------------------------------------------------------------------------
 # 1. INITIALIZATION & CONFIGURATION
@@ -25,7 +29,72 @@ def get_db_connection():
 
 
 # -----------------------------------------------------------------------------
-# 2. RAW DATABASE OPERATIONS & SQL CONTROLS
+# 2. MPESA DARAJA INTEGRATION HELPERS
+# -----------------------------------------------------------------------------
+
+def get_mpesa_access_token():
+    """Fetches a secure OAuth authentication token from Safaricom Daraja."""
+    consumer_key = os.getenv("MPESA_CONSUMER_KEY")
+    consumer_secret = os.getenv("MPESA_CONSUMER_SECRET")
+    api_url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
+    
+    try:
+        res = requests.get(api_url, auth=HTTPBasicAuth(consumer_key, consumer_secret), timeout=10)
+        if res.status_code == 200:
+            return res.json().get("access_token")
+    except Exception as e:
+        print(f"Failed to fetch M-Pesa token: {e}")
+    return None
+
+def initiate_stk_push(phone_number, amount, loan_id, customer_id):
+    """Triggers an STK Push toolkit PIN popup menu to the client's phone handset."""
+    access_token = get_mpesa_access_token()
+    if not access_token:
+        return False
+        
+    api_url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    
+    business_shortcode = os.getenv("MPESA_SHORTCODE")
+    passkey = os.getenv("MPESA_PASSKEY")
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    
+    # Create Daraja Password hash layer string
+    password_str = f"{business_shortcode}{passkey}{timestamp}"
+    password = base64.b64encode(password_str.encode()).decode("utf-8")
+    
+    # Format phone format systematically from 07... to 2547...
+    if phone_number.startswith("0"):
+        phone_number = "254" + phone_number[1:]
+    elif phone_number.startswith("+254"):
+        phone_number = phone_number[1:]
+        
+    payload = {
+        "BusinessShortCode": business_shortcode,
+        "Password": password,
+        "Timestamp": timestamp,
+        "TransactionType": "CustomerPayBillOnline",
+        "Amount": int(amount),
+        "PartyA": phone_number,
+        "PartyB": business_shortcode,
+        "PhoneNumber": phone_number,
+        "CallBackURL": os.getenv("MPESA_CALLBACK_URL"),
+        "AccountReference": f"LN-{loan_id[:6].upper()}",
+        "TransactionDesc": f"Payment For Loan ID {loan_id[:6]}"
+    }
+    
+    try:
+        res = requests.post(api_url, json=payload, headers=headers, timeout=15)
+        print(f"Daraja Gateway Raw Outbound Broadcast Response: {res.text}")
+        if res.status_code == 200 and res.json().get("ResponseCode") == "0":
+            return True
+    except Exception as e:
+        print(f"Daraja API Outbound Post Exception Failure: {e}")
+    return False
+
+
+# -----------------------------------------------------------------------------
+# 3. RAW DATABASE OPERATIONS & SQL CONTROLS
 # -----------------------------------------------------------------------------
 
 def get_user_by_username(username):
@@ -66,7 +135,6 @@ def create_loan(customer_id, first_name, last_name, loan_amount, loan_interest, 
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            # Note: amount_payable is generated automatically by your PostgreSQL table formula
             cur.execute("""
                 INSERT INTO loans (customer_id, first_name, last_name, loan_amount, loan_interest, loan_state)
                 VALUES (%s, %s, %s, %s, %s, %s)
@@ -77,7 +145,6 @@ def create_loan(customer_id, first_name, last_name, loan_amount, loan_interest, 
             loan_id = res[0]
             amount_payable = res[1]
 
-            # If instantly granted, set up the initial tracking balance entry sheets
             if loan_state.lower() == 'granted':
                 cur.execute("""
                     INSERT INTO loan_balances (loan_id, status, amount_payable, paid, balance)
@@ -117,7 +184,6 @@ def update_loan_state(loan_id, new_state):
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            # 1. Update the master loan record state
             cur.execute("""
                 UPDATE loans 
                 SET loan_state = %s 
@@ -126,8 +192,6 @@ def update_loan_state(loan_id, new_state):
             """, (new_state, loan_id))
             
             row = cur.fetchone()
-            
-            # 2. If approved/granted, initialize the loan balance ledger tracking automatically
             if row and new_state == 'granted':
                 loan_amount = float(row[1])
                 loan_interest = float(row[2])
@@ -153,13 +217,11 @@ def process_payment(transaction_code, payment_amount, customer_id, loan_id):
     try:
         conn = get_db_connection()
         with conn.cursor() as cur:
-            # 1. Log payment event to the audit ledger
             cur.execute("""
                 INSERT INTO payment_transactions (transaction_code, payment_amount, customer_id, loan_id)
                 VALUES (%s, %s, %s, %s);
             """, (transaction_code.upper().strip(), payment_amount, customer_id, loan_id))
 
-            # 2. Adjust live systemic tracked remaining balances
             cur.execute("""
                 UPDATE loan_balances
                 SET 
@@ -170,7 +232,6 @@ def process_payment(transaction_code, payment_amount, customer_id, loan_id):
                 WHERE loan_id = %s;
             """, (payment_amount, payment_amount, payment_amount, loan_id))
 
-            # 3. Synchronize status back to master loan ledger records
             cur.execute("""
                 UPDATE loans 
                 SET loan_state = CASE WHEN (SELECT balance FROM loan_balances WHERE loan_id = %s) <= 0 
@@ -194,7 +255,6 @@ def get_dashboard_stats():
         conn = get_db_connection()
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             
-            # Fetch Officers Count
             try:
                 cur.execute("SELECT COUNT(*)::integer as count FROM users")
                 u_res = cur.fetchone()
@@ -202,16 +262,13 @@ def get_dashboard_stats():
             except Exception as ue:
                 print(f"Stats User Query Failed: {ue}")
 
-            # Fetch Onboarded Customers Count
             try:
                 cur.execute("SELECT COUNT(*)::integer as count FROM customers")
                 c_res = cur.fetchone()
                 if c_res: stats['customer_count'] = c_res['count']
             except Exception as ce:
                 print(f"Stats Customer Query Failed: {ce}")
-                conn.rollback()
 
-            # Fetch Financial Analytics Metrics
             try:
                 cur.execute("""
                     SELECT 
@@ -236,7 +293,7 @@ def get_dashboard_stats():
 
 
 # -----------------------------------------------------------------------------
-# 3. FLASK WEB APPLICATION ROUTING LAYER
+# 4. FLASK WEB APPLICATION ROUTING LAYER
 # -----------------------------------------------------------------------------
 
 @app.route('/')
@@ -276,8 +333,6 @@ def dashboard():
         return redirect(url_for('login'))
     
     stats_data = get_dashboard_stats()
-    
-    # Clean mapping casting layer to enforce type safety during template parsing
     safe_stats = {
         'user_count': int(stats_data.get('user_count', 0)),
         'customer_count': int(stats_data.get('customer_count', 0)),
@@ -312,11 +367,8 @@ def web_add_customer():
     return redirect(url_for('dashboard'))
 
 
-# --- SEPARATED LOAN APPLICATION WORKFLOW VIEWS ---
-
 @app.route('/loan/apply', methods=['GET'])
 def loan_apply_page():
-    """Renders the dedicated standalone loan request view file page."""
     if 'user' not in session:
         return redirect(url_for('login'))
     return render_template('apply_loan.html', current_user=session.get('user', {}))
@@ -324,7 +376,6 @@ def loan_apply_page():
 
 @app.route('/loan/issue', methods=['POST'])
 def web_issue_loan():
-    """Processes the save button action data entries from apply_loan.html form."""
     if 'user' not in session:
         return redirect(url_for('login'))
         
@@ -344,11 +395,8 @@ def web_issue_loan():
     return redirect(url_for('dashboard'))
 
 
-# --- NEW: LOAN UNDERWRITING REVIEW PIPELINE VIEW ROUTE MAPPINGS ---
-
 @app.route('/loans/pending', methods=['GET'])
 def pending_loans_page():
-    """Displays all current loans sitting in a pending state."""
     if 'user' not in session:
         return redirect(url_for('login'))
         
@@ -358,12 +406,10 @@ def pending_loans_page():
 
 @app.route('/loan/review/<uuid:loan_id>/<string:action>', methods=['POST'])
 def review_loan_action(loan_id, action):
-    """Processes the instant Approve or Reject button actions."""
     if 'user' not in session:
         return redirect(url_for('login'))
         
     new_state = 'granted' if action == 'approve' else 'rejected'
-    
     success = update_loan_state(str(loan_id), new_state)
     if success:
         flash(f"Loan account status successfully changed to: {new_state.upper()}", "success")
@@ -375,21 +421,59 @@ def review_loan_action(loan_id, action):
 
 @app.route('/payment/receive', methods=['POST'])
 def web_receive_payment():
+    """Triggers an automated M-Pesa STK Push request to the customer phone."""
     if 'user' not in session:
         return redirect(url_for('login'))
         
-    transaction_code = request.form.get('transaction_code')
     payment_amount = float(request.form.get('payment_amount', 0))
     customer_id = request.form.get('customer_id')
     loan_id = request.form.get('loan_id')
     
-    success = process_payment(transaction_code, payment_amount, customer_id, loan_id)
+    phone = None
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT phone FROM customers WHERE id = %s", (customer_id,))
+            res = cur.fetchone()
+            if res: phone = res[0]
+    except Exception as e:
+        print(f"Error fetching client phone: {e}")
+    finally:
+        if conn: conn.close()
+        
+    if not phone:
+        flash("Could not trace customer profile or phone contacts in records.", "danger")
+        return redirect(url_for('dashboard'))
+        
+    success = initiate_stk_push(phone, payment_amount, loan_id, customer_id)
     if success:
-        flash(f"Payment processed successfully! Code: {transaction_code.upper()}", "success")
+        flash(f"STK Push initiated successfully to {phone}! Awaiting customer PIN entry.", "success")
     else:
-        flash("Failed to log transaction. Check for duplicate M-Pesa codes.", "danger")
+        flash("Failed to broadcast handshake message to Daraja API Gateway.", "danger")
         
     return redirect(url_for('dashboard'))
+
+
+@app.route('/mpesa/callback', methods=['POST'])
+def mpesa_callback():
+    """Webhook listener catching Safaricom payload confirmation configurations."""
+    data = request.get_json()
+    print(f"Inbound Safaricom Callback Data Payload Received: {data}")
+    try:
+        stk_callback = data['Body']['stkCallback']
+        result_code = stk_callback['ResultCode']
+        if result_code == 0:
+            callback_metadata = stk_callback['CallbackMetadata']['Item']
+            amount = 0
+            mpesa_code = ""
+            for item in callback_metadata:
+                if item['Name'] == 'Amount': amount = float(item['Value'])
+                elif item['Name'] == 'MpesaReceiptNumber': mpesa_code = str(item['Value'])
+            print(f"SUCCESSFUL AUTOMATED INTERACTION PAY: Code={mpesa_code}, Amt={amount}")
+    except Exception as e:
+        print(f"Error compiling inbound Safaricom callback loop data structures: {e}")
+    return {"ResultCode": 0, "ResultDesc": "Confirmation received successfully"}, 200
 
 
 @app.route('/logout')
