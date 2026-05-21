@@ -93,6 +93,61 @@ def create_loan(customer_id, first_name, last_name, loan_amount, loan_interest, 
     finally:
         if conn: conn.close()
 
+def get_pending_loans():
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, customer_id, first_name, last_name, loan_amount, loan_interest, 
+                       (loan_amount + loan_interest)::float as amount_payable, created_at
+                FROM loans 
+                WHERE LOWER(loan_state) = 'pending'
+                ORDER BY created_at DESC;
+            """)
+            return cur.fetchall()
+    except Exception as e:
+        print(f"DB Error (Get Pending Loans): {e}")
+        return []
+    finally:
+        if conn: conn.close()
+
+def update_loan_state(loan_id, new_state):
+    conn = None
+    try:
+        conn = get_db_connection()
+        with conn.cursor() as cur:
+            # 1. Update the master loan record state
+            cur.execute("""
+                UPDATE loans 
+                SET loan_state = %s 
+                WHERE id = %s 
+                RETURNING id, loan_amount, loan_interest;
+            """, (new_state, loan_id))
+            
+            row = cur.fetchone()
+            
+            # 2. If approved/granted, initialize the loan balance ledger tracking automatically
+            if row and new_state == 'granted':
+                loan_amount = float(row[1])
+                loan_interest = float(row[2])
+                amount_payable = loan_amount + loan_interest
+                
+                cur.execute("""
+                    INSERT INTO loan_balances (loan_id, status, amount_payable, paid, balance)
+                    VALUES (%s, 'granted', %s, 0.00, %s)
+                    ON CONFLICT (loan_id) DO NOTHING;
+                """, (loan_id, amount_payable, amount_payable))
+                
+            conn.commit()
+            return True
+    except Exception as e:
+        print(f"DB Error (Update Loan State): {e}")
+        if conn: conn.rollback()
+        return False
+    finally:
+        if conn: conn.close()
+
 def process_payment(transaction_code, payment_amount, customer_id, loan_id):
     conn = None
     try:
@@ -287,6 +342,35 @@ def web_issue_loan():
         flash("Failed to register loan entry. Verify Customer UUID exists.", "danger")
         
     return redirect(url_for('dashboard'))
+
+
+# --- NEW: LOAN UNDERWRITING REVIEW PIPELINE VIEW ROUTE MAPPINGS ---
+
+@app.route('/loans/pending', methods=['GET'])
+def pending_loans_page():
+    """Displays all current loans sitting in a pending state."""
+    if 'user' not in session:
+        return redirect(url_for('login'))
+        
+    pending_list = get_pending_loans()
+    return render_template('pending_loans.html', loans=pending_list, current_user=session.get('user', {}))
+
+
+@app.route('/loan/review/<uuid:loan_id>/<string:action>', methods=['POST'])
+def review_loan_action(loan_id, action):
+    """Processes the instant Approve or Reject button actions."""
+    if 'user' not in session:
+        return redirect(url_for('login'))
+        
+    new_state = 'granted' if action == 'approve' else 'rejected'
+    
+    success = update_loan_state(str(loan_id), new_state)
+    if success:
+        flash(f"Loan account status successfully changed to: {new_state.upper()}", "success")
+    else:
+        flash("Failed to update the state of this loan account request.", "danger")
+        
+    return redirect(url_for('pending_loans_page'))
 
 
 @app.route('/payment/receive', methods=['POST'])
