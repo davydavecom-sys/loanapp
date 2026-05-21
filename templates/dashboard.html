@@ -13,7 +13,8 @@
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1"><i class="bi bi-bank2 me-2"></i>Microfinance Ledger Pro</span>
             <div class="d-flex align-items-center">
-                <a href="/loan/apply" class="btn btn-sm btn-success me-3"><i class="bi bi-plus-circle me-1"></i>Apply for Loan</a>
+                <a href="/loans/pending" class="btn btn-sm btn-warning me-2 fw-semibold"><i class="bi bi-shield-check me-1"></i>Review Pipeline</a>
+                <a href="/loan/apply" class="btn btn-sm btn-success me-3 fw-semibold"><i class="bi bi-plus-circle me-1"></i>Apply for Loan</a>
                 
                 <span class="text-white-50 me-3">
                     Active Session: <strong class="text-white">{{ current_user.get('username', 'User') }}</strong> 
