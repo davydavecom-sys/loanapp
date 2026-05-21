@@ -299,6 +299,35 @@ def web_receive_payment():
         
     return redirect(url_for('dashboard'))
 
+
+@app.route('/loan/apply', methods=['GET'])
+def loan_apply_page():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    # Renders the dedicated loan application form page
+    return render_template('apply_loan.html', current_user=session.get('user', {}))
+
+
+@app.route('/loan/issue', methods=['POST'])
+def web_issue_loan():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+        
+    customer_id = request.form.get('customer_id')
+    first_name = request.form.get('first_name')
+    last_name = request.form.get('last_name')
+    loan_amount = float(request.form.get('loan_amount', 0))
+    loan_interest = float(request.form.get('loan_interest', 0))
+    loan_state = request.form.get('loan_state', 'pending')
+    
+    loan_id = create_loan(customer_id, first_name, last_name, loan_amount, loan_interest, loan_state)
+    if loan_id:
+        flash(f"Loan record successfully saved with state: {loan_state}!", "success")
+    else:
+        flash("Failed to register loan entry. Verify Customer UUID exists.", "danger")
+        
+    return redirect(url_for('dashboard'))
+
 @app.route('/logout')
 def logout():
     session.clear()
